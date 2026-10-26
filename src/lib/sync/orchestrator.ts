@@ -6,7 +6,7 @@ import { fetchAllProjectCommits } from "@/lib/github/commits";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { getAppEnv } from "@/lib/config/env";
 import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun } from "@/types";
 
 export interface SyncExecutionResult {
   run: SyncRun;
@@ -125,7 +125,6 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
     );
 
     // Step 9: Assemble snapshot
-    const previousSnapshot = await storage.readLatestAnalytics();
     const sourceStatus = sheetResult.errors.length > 0 ? "error" : "connected";
 
     const newSnapshot: AnalyticsSnapshot = {

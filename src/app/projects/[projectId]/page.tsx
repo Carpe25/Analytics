@@ -3,12 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
-  FolderGit2,
-  GitCommit,
-  Users,
-  Tag,
   ArrowLeft,
-  Clock,
   Plus,
   GitBranch,
   Trash2,
@@ -16,7 +11,6 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -117,7 +111,7 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
     <div className="flex-1 flex flex-col">
       <Header
         title={project.name}
-        description={`Project Code: ${project.code || "N/A"} • Total: ${project.totalHours.toFixed(1)} hours logged`}
+        description={`${project.client ? `Client: ${project.client} • ` : ""}Project Code: ${project.code || "N/A"} • Total: ${project.totalHours.toFixed(1)} hours logged`}
         onSyncComplete={loadProjectDetails}
         actions={
           <div className="flex items-center gap-2">
@@ -139,236 +133,263 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
         }
       />
 
-      <div className="p-6 space-y-6">
+      <div className="w-full max-w-none px-8 py-6 space-y-8 font-sans">
         {/* Project KPI Stats: Flat, unboxed layout */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 py-3 border-b border-[#17212B]/15">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 py-4 border-b border-[#17212B]/15">
           <div>
-            <p className="text-[10px] font-semibold text-[#17212B]/60 uppercase tracking-wider">Total Hours</p>
+            <p className="text-[11px] font-semibold text-[#17212B]/60 uppercase tracking-wider">Total Hours</p>
             <h4 className="text-3xl font-extrabold font-mono text-[#17212B] mt-1">{project.totalHours.toFixed(1)}h</h4>
           </div>
           <div>
-            <p className="text-[10px] font-semibold text-[#17212B]/60 uppercase tracking-wider">Developers</p>
+            <p className="text-[11px] font-semibold text-[#17212B]/60 uppercase tracking-wider">Developers</p>
             <h4 className="text-3xl font-extrabold font-mono text-[#17212B] mt-1">{project.developerCount}</h4>
           </div>
           <div>
-            <p className="text-[10px] font-semibold text-[#17212B]/60 uppercase tracking-wider">Work Logs</p>
+            <p className="text-[11px] font-semibold text-[#17212B]/60 uppercase tracking-wider">Work Logs</p>
             <h4 className="text-3xl font-extrabold font-mono text-[#17212B] mt-1">{project.logCount}</h4>
           </div>
           <div>
-            <p className="text-[10px] font-semibold text-[#17212B]/60 uppercase tracking-wider">GitHub Commits</p>
+            <p className="text-[11px] font-semibold text-[#17212B]/60 uppercase tracking-wider">GitHub Commits</p>
             <h4 className="text-3xl font-extrabold font-mono text-[#17212B] mt-1">{commits.length}</h4>
           </div>
         </div>
 
         {/* 7 Required Tabs */}
         <Tabs defaultValue="summary" className="w-full">
-          <TabsList className="w-full justify-start overflow-x-auto h-10 p-1 border-b border-[#17212B]/15">
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="work-logs">Work Logs ({workLogs.length})</TabsTrigger>
-            <TabsTrigger value="developers">Developer Breakdown</TabsTrigger>
-            <TabsTrigger value="categories">Category Breakdown</TabsTrigger>
-            <TabsTrigger value="matrix">Developer × Category Matrix</TabsTrigger>
-            <TabsTrigger value="github">GitHub Commits ({commits.length})</TabsTrigger>
-            <TabsTrigger value="sync-source">Sync / Source Details</TabsTrigger>
+          <TabsList className="w-full justify-start overflow-x-auto h-10 p-0 bg-transparent border-b border-[#17212B]/15 rounded-none gap-2">
+            <TabsTrigger
+              value="summary"
+              className="text-xs font-semibold rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent data-[state=active]:text-[#17212B] px-3 py-2"
+            >
+              Summary
+            </TabsTrigger>
+            <TabsTrigger
+              value="work-logs"
+              className="text-xs font-semibold rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent data-[state=active]:text-[#17212B] px-3 py-2"
+            >
+              Work Logs ({workLogs.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="developers"
+              className="text-xs font-semibold rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent data-[state=active]:text-[#17212B] px-3 py-2"
+            >
+              Developer Breakdown
+            </TabsTrigger>
+            <TabsTrigger
+              value="categories"
+              className="text-xs font-semibold rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent data-[state=active]:text-[#17212B] px-3 py-2"
+            >
+              Category Breakdown
+            </TabsTrigger>
+            <TabsTrigger
+              value="matrix"
+              className="text-xs font-semibold rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent data-[state=active]:text-[#17212B] px-3 py-2"
+            >
+              Developer × Category Matrix
+            </TabsTrigger>
+            <TabsTrigger
+              value="github"
+              className="text-xs font-semibold rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent data-[state=active]:text-[#17212B] px-3 py-2"
+            >
+              GitHub Commits ({commits.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="sync-source"
+              className="text-xs font-semibold rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent data-[state=active]:text-[#17212B] px-3 py-2"
+            >
+              Sync / Source Details
+            </TabsTrigger>
           </TabsList>
 
           {/* TAB 1: SUMMARY */}
-          <TabsContent value="summary" className="space-y-6 pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <TabsContent value="summary" className="space-y-6 pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Top Developers */}
-              <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-                <CardHeader>
-                  <CardTitle className="text-sm">Top Developer Contributions</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-[#17212B] pb-2 border-b border-[#17212B]/15">
+                  Top Developer Contributions
+                </h3>
+                <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Developer</TableHead>
-                        <TableHead className="text-right">Hours</TableHead>
-                        <TableHead className="text-right">Share</TableHead>
+                      <TableRow className="border-b border-[#17212B]/15">
+                        <TableHead className="text-xs font-semibold text-[#17212B]">Developer</TableHead>
+                        <TableHead className="text-right text-xs font-semibold text-[#17212B]">Hours</TableHead>
+                        <TableHead className="text-right text-xs font-semibold text-[#17212B]">Share</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {developerBreakdown.slice(0, 5).map((d) => (
-                        <TableRow key={d.id}>
-                          <TableCell className="text-xs font-medium">{d.name}</TableCell>
-                          <TableCell className="text-right font-mono text-xs font-semibold">{d.hours.toFixed(1)}h</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{d.percentage}%</TableCell>
+                        <TableRow key={d.id} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
+                          <TableCell className="text-xs font-medium py-2.5">{d.name}</TableCell>
+                          <TableCell className="text-right font-mono text-xs font-bold py-2.5">{d.hours.toFixed(1)}h</TableCell>
+                          <TableCell className="text-right font-mono text-xs py-2.5">{d.percentage}%</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
               {/* Categories */}
-              <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-                <CardHeader>
-                  <CardTitle className="text-sm">Category Allocation</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-[#17212B] pb-2 border-b border-[#17212B]/15">
+                  Category Allocation
+                </h3>
+                <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Category</TableHead>
-                        <TableHead className="text-right">Hours</TableHead>
-                        <TableHead className="text-right">Share</TableHead>
+                      <TableRow className="border-b border-[#17212B]/15">
+                        <TableHead className="text-xs font-semibold text-[#17212B]">Category</TableHead>
+                        <TableHead className="text-right text-xs font-semibold text-[#17212B]">Hours</TableHead>
+                        <TableHead className="text-right text-xs font-semibold text-[#17212B]">Share</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {categoryBreakdown.map((c) => (
-                        <TableRow key={c.category}>
-                          <TableCell className="text-xs font-medium">{c.category}</TableCell>
-                          <TableCell className="text-right font-mono text-xs font-semibold">{c.hours.toFixed(1)}h</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{c.percentage}%</TableCell>
+                        <TableRow key={c.category} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
+                          <TableCell className="text-xs font-medium py-2.5">{c.category}</TableCell>
+                          <TableCell className="text-right font-mono text-xs font-bold py-2.5">{c.hours.toFixed(1)}h</TableCell>
+                          <TableCell className="text-right font-mono text-xs py-2.5">{c.percentage}%</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </div>
           </TabsContent>
 
           {/* TAB 2: WORK LOGS */}
-          <TabsContent value="work-logs" className="pt-4">
-            <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-24">Date</TableHead>
-                      <TableHead className="w-36">Developer</TableHead>
-                      <TableHead className="w-28">Category</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="w-24">Ticket ID</TableHead>
-                      <TableHead className="w-24 text-right">Hours</TableHead>
+          <TabsContent value="work-logs" className="pt-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[#17212B]/15">
+                    <TableHead className="w-24 text-xs font-semibold text-[#17212B]">Date</TableHead>
+                    <TableHead className="w-36 text-xs font-semibold text-[#17212B]">Developer</TableHead>
+                    <TableHead className="w-28 text-xs font-semibold text-[#17212B]">Category</TableHead>
+                    <TableHead className="text-xs font-semibold text-[#17212B]">Description</TableHead>
+                    <TableHead className="w-24 text-xs font-semibold text-[#17212B]">Ticket ID</TableHead>
+                    <TableHead className="w-24 text-right text-xs font-semibold text-[#17212B]">Hours</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {workLogs.map((log) => (
+                    <TableRow key={log.id} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
+                      <TableCell className="font-mono text-xs whitespace-nowrap py-2.5">{log.date}</TableCell>
+                      <TableCell className="text-xs font-medium py-2.5">{log.developerName}</TableCell>
+                      <TableCell className="py-2.5">
+                        <Badge variant="secondary" className="text-[10px] rounded-full bg-white border border-[#17212B]/15">
+                          {log.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-[#17212B]/90 py-2.5">{log.description}</TableCell>
+                      <TableCell className="font-mono text-[11px] text-[#17212B]/75 py-2.5">{log.taskTicketId || "—"}</TableCell>
+                      <TableCell className="text-right font-mono text-xs font-bold whitespace-nowrap py-2.5">
+                        {log.hours.toFixed(1)}h
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {workLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="font-mono text-xs whitespace-nowrap">{log.date}</TableCell>
-                        <TableCell className="text-xs font-medium">{log.developerName}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-[10px]">
-                            {log.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-[#17212B]/90">{log.description}</TableCell>
-                        <TableCell className="font-mono text-[11px] text-[#17212B]/75">{log.taskTicketId || "—"}</TableCell>
-                        <TableCell className="text-right font-mono text-xs font-semibold whitespace-nowrap">
-                          {log.hours.toFixed(1)}h
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </TabsContent>
 
           {/* TAB 3: DEVELOPER BREAKDOWN */}
-          <TabsContent value="developers" className="pt-4">
-            <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Developer</TableHead>
-                      <TableHead className="text-right">Logged Hours</TableHead>
-                      <TableHead className="text-right">Contribution %</TableHead>
-                      <TableHead className="text-right">Log Entries</TableHead>
+          <TabsContent value="developers" className="pt-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[#17212B]/15">
+                    <TableHead className="text-xs font-semibold text-[#17212B]">Developer</TableHead>
+                    <TableHead className="text-right text-xs font-semibold text-[#17212B]">Logged Hours</TableHead>
+                    <TableHead className="text-right text-xs font-semibold text-[#17212B]">Contribution %</TableHead>
+                    <TableHead className="text-right text-xs font-semibold text-[#17212B]">Log Entries</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {developerBreakdown.map((d) => (
+                    <TableRow key={d.id} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
+                      <TableCell className="text-xs font-semibold py-2.5">{d.name}</TableCell>
+                      <TableCell className="text-right font-mono text-xs font-bold py-2.5">{d.hours.toFixed(1)}h</TableCell>
+                      <TableCell className="text-right font-mono text-xs py-2.5">{d.percentage}%</TableCell>
+                      <TableCell className="text-right font-mono text-xs py-2.5">{d.count}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {developerBreakdown.map((d) => (
-                      <TableRow key={d.id}>
-                        <TableCell className="text-xs font-semibold">{d.name}</TableCell>
-                        <TableCell className="text-right font-mono text-xs font-bold">{d.hours.toFixed(1)}h</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{d.percentage}%</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{d.count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </TabsContent>
 
           {/* TAB 4: CATEGORY BREAKDOWN */}
-          <TabsContent value="categories" className="pt-4">
-            <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Hours Logged</TableHead>
-                      <TableHead className="text-right">Share of Total</TableHead>
-                      <TableHead className="text-right">Log Count</TableHead>
+          <TabsContent value="categories" className="pt-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[#17212B]/15">
+                    <TableHead className="text-xs font-semibold text-[#17212B]">Category</TableHead>
+                    <TableHead className="text-right text-xs font-semibold text-[#17212B]">Hours Logged</TableHead>
+                    <TableHead className="text-right text-xs font-semibold text-[#17212B]">Share of Total</TableHead>
+                    <TableHead className="text-right text-xs font-semibold text-[#17212B]">Log Count</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {categoryBreakdown.map((c) => (
+                    <TableRow key={c.category} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
+                      <TableCell className="text-xs font-semibold py-2.5">{c.category}</TableCell>
+                      <TableCell className="text-right font-mono text-xs font-bold py-2.5">{c.hours.toFixed(1)}h</TableCell>
+                      <TableCell className="text-right font-mono text-xs py-2.5">{c.percentage}%</TableCell>
+                      <TableCell className="text-right font-mono text-xs py-2.5">{c.count}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {categoryBreakdown.map((c) => (
-                      <TableRow key={c.category}>
-                        <TableCell className="text-xs font-semibold">{c.category}</TableCell>
-                        <TableCell className="text-right font-mono text-xs font-bold">{c.hours.toFixed(1)}h</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{c.percentage}%</TableCell>
-                        <TableCell className="text-right font-mono text-xs">{c.count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </TabsContent>
 
           {/* TAB 5: DEVELOPER X CATEGORY MATRIX */}
-          <TabsContent value="matrix" className="pt-4">
-            <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-              <CardContent className="p-0 overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[140px]">Developer</TableHead>
-                      {categoriesList.map((cat) => (
-                        <TableHead key={cat} className="text-right whitespace-nowrap">
-                          {cat}
-                        </TableHead>
-                      ))}
-                      <TableHead className="text-right font-bold">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Object.entries(devCategoryMatrix).map(([devName, cats]) => {
-                      const totalMin = Object.values(cats).reduce((s, v) => s + v, 0);
-                      return (
-                        <TableRow key={devName}>
-                          <TableCell className="text-xs font-semibold">{devName}</TableCell>
-                          {categoriesList.map((cat) => {
-                            const minutes = cats[cat] || 0;
-                            return (
-                              <TableCell key={cat} className="text-right font-mono text-xs">
-                                {minutes > 0 ? `${(minutes / 60).toFixed(1)}h` : "—"}
-                              </TableCell>
-                            );
-                          })}
-                          <TableCell className="text-right font-mono text-xs font-bold">
-                            {(totalMin / 60).toFixed(1)}h
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+          <TabsContent value="matrix" className="pt-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[#17212B]/15">
+                    <TableHead className="min-w-[140px] text-xs font-semibold text-[#17212B]">Developer</TableHead>
+                    {categoriesList.map((cat) => (
+                      <TableHead key={cat} className="text-right whitespace-nowrap text-xs font-semibold text-[#17212B]">
+                        {cat}
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-right font-bold text-xs text-[#17212B]">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.entries(devCategoryMatrix).map(([devName, cats]) => {
+                    const totalMin = Object.values(cats).reduce((s, v) => s + v, 0);
+                    return (
+                      <TableRow key={devName} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
+                        <TableCell className="text-xs font-semibold py-2.5">{devName}</TableCell>
+                        {categoriesList.map((cat) => {
+                          const minutes = cats[cat] || 0;
+                          return (
+                            <TableCell key={cat} className="text-right font-mono text-xs py-2.5">
+                              {minutes > 0 ? `${(minutes / 60).toFixed(1)}h` : "—"}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="text-right font-mono text-xs font-bold py-2.5">
+                          {(totalMin / 60).toFixed(1)}h
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </TabsContent>
 
           {/* TAB 6: GITHUB COMMITS */}
-          <TabsContent value="github" className="pt-4 space-y-4">
+          <TabsContent value="github" className="pt-6 space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-xs text-[#17212B]/70">
                 Commits synced from connected GitHub repositories for project <strong>{project.name}</strong>.
@@ -387,12 +408,12 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
           </TabsContent>
 
           {/* TAB 7: SYNC & SOURCE DETAILS */}
-          <TabsContent value="sync-source" className="pt-4 space-y-6">
-            {/* Connected Repositories Card */}
-            <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <TabsContent value="sync-source" className="pt-6 space-y-8">
+            {/* Connected Repositories */}
+            <div className="space-y-3 pb-6 border-b border-[#17212B]/15">
+              <div className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-sm">Connected GitHub Repositories</CardTitle>
+                  <h3 className="text-sm font-bold text-[#17212B]">Connected GitHub Repositories</h3>
                   <p className="text-xs text-[#17212B]/60 mt-0.5">
                     Repositories whose commit history is linked to this project
                   </p>
@@ -405,37 +426,38 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
                   <Plus className="h-3.5 w-3.5" />
                   <span>Connect Repository</span>
                 </Button>
-              </CardHeader>
-              <CardContent className="p-0">
-                {(!data.config?.githubRepos || data.config.githubRepos.length === 0) ? (
-                  <div className="p-6 text-center text-xs text-[#17212B]/60">
-                    <GitBranch className="h-6 w-6 mx-auto mb-2 opacity-40" />
-                    <p>No GitHub repositories currently connected to this project.</p>
-                  </div>
-                ) : (
+              </div>
+
+              {(!data.config?.githubRepos || data.config.githubRepos.length === 0) ? (
+                <div className="p-8 text-center text-xs text-[#17212B]/60">
+                  <GitBranch className="h-6 w-6 mx-auto mb-2 opacity-40" />
+                  <p>No GitHub repositories currently connected to this project.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Repository</TableHead>
-                        <TableHead>Default Branch</TableHead>
-                        <TableHead className="w-24 text-right">Actions</TableHead>
+                      <TableRow className="border-b border-[#17212B]/15">
+                        <TableHead className="text-xs font-semibold text-[#17212B]">Repository</TableHead>
+                        <TableHead className="text-xs font-semibold text-[#17212B]">Default Branch</TableHead>
+                        <TableHead className="w-24 text-right text-xs font-semibold text-[#17212B]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.config.githubRepos.map((repo: any) => (
-                        <TableRow key={`${repo.owner}/${repo.repo}`}>
-                          <TableCell className="font-mono text-xs font-semibold">
+                        <TableRow key={`${repo.owner}/${repo.repo}`} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
+                          <TableCell className="font-mono text-xs font-semibold py-2.5">
                             {repo.owner}/{repo.repo}
                           </TableCell>
-                          <TableCell className="font-mono text-xs text-[#17212B]/75">
+                          <TableCell className="font-mono text-xs text-[#17212B]/75 py-2.5">
                             {repo.defaultBranch || "main"}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right py-2.5">
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDisconnectRepo(repo.owner, repo.repo)}
-                              className="h-7 px-2 text-[#17212B] hover:bg-[#17212B]/10"
+                              className="h-7 px-2 text-[#17212B] hover:bg-[#17212B]/10 rounded-full"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -444,23 +466,36 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
                       ))}
                     </TableBody>
                   </Table>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              )}
+            </div>
 
             {/* Source Sheet Info */}
-            <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-              <CardHeader>
-                <CardTitle className="text-sm">Google Sheets Source Identity</CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs space-y-2 text-[#17212B]/80 font-mono">
-                <div>Canonical Project ID: <strong>{project.id}</strong></div>
-                <div>Project Code: <strong>{project.code || "None"}</strong></div>
-                <div>Recognized Aliases: <strong>{(data.config?.aliases || []).join(", ") || "None"}</strong></div>
-                <div>Total Work Log Rows: <strong>{workLogs.length}</strong></div>
-                <div>Last Recorded Work Date: <strong>{project.latestLogDate || "None"}</strong></div>
-              </CardContent>
-            </Card>
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-[#17212B]">Google Sheets Source Identity</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-mono">
+                <div className="p-3 border-l-2 border-[#17212B] bg-[#17212B]/5">
+                  <div className="text-[#17212B]/60 text-[10px] uppercase font-semibold">Canonical Project ID</div>
+                  <div className="font-bold text-[#17212B] mt-1">{project.id}</div>
+                </div>
+                <div className="p-3 border-l-2 border-[#17212B] bg-[#17212B]/5">
+                  <div className="text-[#17212B]/60 text-[10px] uppercase font-semibold">Project Code</div>
+                  <div className="font-bold text-[#17212B] mt-1">{project.code || "None"}</div>
+                </div>
+                <div className="p-3 border-l-2 border-[#17212B] bg-[#17212B]/5">
+                  <div className="text-[#17212B]/60 text-[10px] uppercase font-semibold">Total Work Log Rows</div>
+                  <div className="font-bold text-[#17212B] mt-1">{workLogs.length}</div>
+                </div>
+                <div className="p-3 border-l-2 border-[#17212B] bg-[#17212B]/5">
+                  <div className="text-[#17212B]/60 text-[10px] uppercase font-semibold">Last Recorded Work Date</div>
+                  <div className="font-bold text-[#17212B] mt-1">{project.latestLogDate || "None"}</div>
+                </div>
+                <div className="p-3 border-l-2 border-[#17212B] bg-[#17212B]/5 sm:col-span-2">
+                  <div className="text-[#17212B]/60 text-[10px] uppercase font-semibold">Recognized Aliases</div>
+                  <div className="font-bold text-[#17212B] mt-1">{(data.config?.aliases || []).join(", ") || "None"}</div>
+                </div>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

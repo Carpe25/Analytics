@@ -7,6 +7,7 @@ import {
   AnalyticsSnapshot,
   ProjectConfig,
 } from "@/types";
+import { resolveProjectClient } from "@/lib/config/defaults";
 
 export interface AggregationResult {
   summary: AnalyticsSnapshot["summary"];
@@ -184,10 +185,12 @@ export function computeAnalytics(
   const projects: ProjectSummary[] = Array.from(projectMap.values()).map((p) => {
     const cfg = configuredProjects.find((cp) => cp.id === p.id);
     const connectedRepos = (cfg?.githubRepos || []).map((r) => `${r.owner}/${r.repo}`);
+    const client = resolveProjectClient(p.name, cfg?.client);
     return {
       id: p.id,
       name: p.name,
       code: p.code,
+      client,
       totalMinutes: p.totalMinutes,
       totalHours: Number((p.totalMinutes / 60).toFixed(1)),
       developerCount: p.developerIds.size,

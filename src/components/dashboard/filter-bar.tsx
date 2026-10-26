@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Download, Filter, Calendar } from "lucide-react";
+import { Download, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,36 @@ export function FilterBar({
     document.body.removeChild(link);
   };
 
+  const handleMonthChange = (selectedMonth: string) => {
+    if (!selectedMonth || selectedMonth === "all") {
+      onFilterChange("month", "all");
+      onFilterChange("startDate", "");
+      onFilterChange("endDate", "");
+    } else {
+      onFilterChange("month", selectedMonth);
+      const [yearStr, monthStr] = selectedMonth.split("-");
+      const year = parseInt(yearStr, 10);
+      const monthNum = parseInt(monthStr, 10);
+      const lastDay = new Date(year, monthNum, 0).getDate();
+      onFilterChange("startDate", `${selectedMonth}-01`);
+      onFilterChange("endDate", `${selectedMonth}-${String(lastDay).padStart(2, "0")}`);
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    onFilterChange("startDate", val);
+    if (!val && !filters.endDate) {
+      onFilterChange("month", "all");
+    }
+  };
+
+  const handleEndDateChange = (val: string) => {
+    onFilterChange("endDate", val);
+    if (!val && !filters.startDate) {
+      onFilterChange("month", "all");
+    }
+  };
+
   return (
     <div className="py-3 border-b border-[#17212B]/15 flex flex-wrap items-center justify-between gap-3 text-xs">
       <div className="flex flex-wrap items-center gap-3">
@@ -59,8 +89,8 @@ export function FilterBar({
           <div className="w-40">
             <Select
               value={filters.month}
-              onChange={(e) => onFilterChange("month", e.target.value)}
-              className="h-8 py-0 font-medium text-xs"
+              onChange={(e) => handleMonthChange(e.target.value)}
+              className="h-8 py-0 font-medium text-xs rounded-full bg-white border-[#17212B]/20"
             >
               <option value="all">All Months</option>
               {availableMonths.map((m) => (
@@ -77,7 +107,7 @@ export function FilterBar({
           <Select
             value={filters.projectId}
             onChange={(e) => onFilterChange("projectId", e.target.value)}
-            className="h-8 py-0"
+            className="h-8 py-0 rounded-full bg-white border-[#17212B]/20"
           >
             <option value="all">All Projects</option>
             {projects.map((p) => (
@@ -93,7 +123,7 @@ export function FilterBar({
           <Select
             value={filters.developerId}
             onChange={(e) => onFilterChange("developerId", e.target.value)}
-            className="h-8 py-0"
+            className="h-8 py-0 rounded-full bg-white border-[#17212B]/20"
           >
             <option value="all">All Developers</option>
             {developers.map((d) => (
@@ -109,7 +139,7 @@ export function FilterBar({
           <Select
             value={filters.category}
             onChange={(e) => onFilterChange("category", e.target.value)}
-            className="h-8 py-0"
+            className="h-8 py-0 rounded-full bg-white border-[#17212B]/20"
           >
             <option value="all">All Categories</option>
             {categories.map((c) => (
@@ -120,27 +150,32 @@ export function FilterBar({
           </Select>
         </div>
 
-        {/* Custom Date Range (optional if user wants specific days) */}
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] text-[#17212B]/60">From:</span>
+        {/* Custom Date Range */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-[#17212B]/70">From:</span>
           <Input
             type="date"
-            className="w-32 h-8 text-xs py-0"
+            className="w-34 h-8 text-xs py-0 rounded-full bg-white border-[#17212B]/20 px-3"
             value={filters.startDate}
-            onChange={(e) => onFilterChange("startDate", e.target.value)}
+            onChange={(e) => handleStartDateChange(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] text-[#17212B]/60">To:</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-[#17212B]/70">To:</span>
           <Input
             type="date"
-            className="w-32 h-8 text-xs py-0"
+            className="w-34 h-8 text-xs py-0 rounded-full bg-white border-[#17212B]/20 px-3"
             value={filters.endDate}
-            onChange={(e) => onFilterChange("endDate", e.target.value)}
+            onChange={(e) => handleEndDateChange(e.target.value)}
           />
         </div>
 
-        <Button variant="ghost" size="sm" onClick={onReset} className="h-8 text-xs text-[#17212B]/75 hover:text-[#17212B]">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onReset}
+          className="h-8 text-xs rounded-full bg-white border border-[#17212B]/20 shadow-sm hover:bg-gray-50"
+        >
           Reset
         </Button>
       </div>

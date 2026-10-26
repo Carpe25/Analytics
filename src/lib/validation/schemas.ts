@@ -7,6 +7,7 @@ export const WorkLogSchema = z.object({
   developerName: z.string().min(1),
   projectId: z.string().min(1),
   projectName: z.string().min(1),
+  client: z.string().optional(),
   category: z.string().min(1),
   durationMinutes: z.number().int().positive("Duration must be positive integer minutes"),
   hours: z.number().nonnegative(),
@@ -72,6 +73,7 @@ export const ProjectConfigSchema = z.object({
   id: z.string().min(1, "Project ID is required"),
   name: z.string().min(1, "Project name is required"),
   code: z.string().optional(),
+  client: z.string().optional(),
   aliases: z.array(z.string()).optional(),
   githubRepos: z.array(GitHubRepoConfigSchema).optional(),
 });
@@ -89,6 +91,7 @@ export const IntegrationSettingsSchema = z.object({
     columnMapping: z.object({
       date: z.string().default("Date"),
       developer: z.string().optional(),
+      client: z.string().optional(),
       project: z.string().default("Project"),
       category: z.string().default("Category"),
       duration: z.string().default("Hours"),

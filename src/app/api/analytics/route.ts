@@ -31,14 +31,15 @@ export async function GET(req: NextRequest) {
   }
   const availableMonths = Array.from(monthSet).sort().reverse();
 
-  // If month is provided, e.g. "2026-09"
-  if (month && month !== "all") {
-    startDate = `${month}-01`;
-    // Approximate or pass exact month prefix check
-  }
-
   // If no filters, return raw snapshot with availableMonths
-  if ((!month || month === "all") && !startDate && !endDate && !projectId && !developerId && !category) {
+  if (
+    (!month || month === "all") &&
+    !startDate &&
+    !endDate &&
+    (!projectId || projectId === "all") &&
+    (!developerId || developerId === "all") &&
+    (!category || category === "all")
+  ) {
     return NextResponse.json({
       ...snapshot,
       availableMonths,
@@ -47,15 +48,14 @@ export async function GET(req: NextRequest) {
 
   // Apply filters
   let filteredLogs = [...snapshot.workLogs];
-  if (month && month !== "all") {
+  if (startDate) {
+    filteredLogs = filteredLogs.filter((l) => l.date >= startDate);
+  }
+  if (endDate) {
+    filteredLogs = filteredLogs.filter((l) => l.date <= endDate);
+  }
+  if (month && month !== "all" && !startDate && !endDate) {
     filteredLogs = filteredLogs.filter((l) => l.date.startsWith(month));
-  } else {
-    if (startDate) {
-      filteredLogs = filteredLogs.filter((l) => l.date >= startDate);
-    }
-    if (endDate) {
-      filteredLogs = filteredLogs.filter((l) => l.date <= endDate);
-    }
   }
   if (projectId && projectId !== "all") {
     filteredLogs = filteredLogs.filter((l) => l.projectId === projectId);

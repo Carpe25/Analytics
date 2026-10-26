@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import {
-  Settings,
   FolderGit2,
   FileSpreadsheet,
   Database,
@@ -117,6 +116,7 @@ export default function SettingsPage() {
           id: newId,
           name: "New Project",
           code: "NP",
+          client: "Carpe Diem",
           aliases: [],
           githubRepos: [],
         },
@@ -209,7 +209,7 @@ export default function SettingsPage() {
         }
       />
 
-      <div className="p-6 max-w-5xl space-y-8">
+      <div className="w-full max-w-none px-8 py-6 space-y-8 font-sans">
         {saveStatus && (
           <div className="p-3 rounded border border-[#17212B]/30 bg-[#17212B]/10 text-xs font-mono text-[#17212B]">
             {saveStatus}
@@ -332,8 +332,18 @@ export default function SettingsPage() {
                         updated[pIndex].code = e.target.value;
                         setSettings({ ...settings, projects: updated });
                       }}
-                      className="font-mono text-xs h-8 w-24"
-                      placeholder="Code (e.g. CORE)"
+                      className="font-mono text-xs h-8 w-20"
+                      placeholder="Code"
+                    />
+                    <Input
+                      value={proj.client || ""}
+                      onChange={(e) => {
+                        const updated = [...settings.projects];
+                        updated[pIndex].client = e.target.value;
+                        setSettings({ ...settings, projects: updated });
+                      }}
+                      className="text-xs h-8 w-36"
+                      placeholder="Client (e.g. Carpe Diem)"
                     />
                     <span className="text-[10px] text-[#17212B]/60 font-mono">ID: {proj.id}</span>
                   </div>

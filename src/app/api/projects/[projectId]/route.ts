@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
+import { resolveProjectClient } from "@/lib/config/defaults";
 
 export async function GET(
   req: NextRequest,
@@ -61,7 +62,10 @@ export async function GET(
   const config = settings?.projects.find((p) => p.id === projectId);
 
   return NextResponse.json({
-    project,
+    project: {
+      ...project,
+      client: project.client || config?.client || resolveProjectClient(project.name, config?.client),
+    },
     config,
     workLogs: projectLogs,
     commits: projectCommits,

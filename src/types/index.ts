@@ -5,6 +5,7 @@ export interface WorkLog {
   developerName: string;
   projectId: string;
   projectName: string;
+  client?: string;
   category: string;
   durationMinutes: number;
   hours: number;
@@ -19,6 +20,7 @@ export interface ProjectSummary {
   id: string;
   name: string;
   code?: string;
+  client?: string;
   totalMinutes: number;
   totalHours: number;
   developerCount: number;
@@ -83,6 +85,7 @@ export interface ProjectConfig {
   id: string;
   name: string;
   code?: string;
+  client?: string;
   aliases?: string[];
   githubRepos?: GitHubRepoConfig[];
 }
@@ -97,6 +100,7 @@ export interface GoogleSheetsConfig {
   columnMapping: {
     date: string;
     developer?: string;
+    client?: string;
     project: string;
     category: string;
     duration: string;

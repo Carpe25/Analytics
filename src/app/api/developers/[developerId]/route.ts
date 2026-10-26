@@ -8,6 +8,8 @@ export async function GET(
   const { developerId } = params;
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month");
+  const startDate = searchParams.get("startDate");
+  const endDate = searchParams.get("endDate");
 
   const storage = getArtifactStorage();
   const snapshot = await storage.readLatestAnalytics();
@@ -31,9 +33,15 @@ export async function GET(
   }
   const availableMonths = Array.from(monthSet).sort().reverse();
 
-  // Filter logs by month if specified
+  // Filter logs by date range or month if specified
   let developerLogs = allDevLogs;
-  if (month && month !== "all") {
+  if (startDate) {
+    developerLogs = developerLogs.filter((l) => l.date >= startDate);
+  }
+  if (endDate) {
+    developerLogs = developerLogs.filter((l) => l.date <= endDate);
+  }
+  if (month && month !== "all" && !startDate && !endDate) {
     developerLogs = developerLogs.filter((l) => l.date.startsWith(month));
   }
 

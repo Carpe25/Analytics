@@ -1,18 +1,25 @@
 import { IArtifactStorage } from "./interface";
 import { LocalArtifactStorage } from "./local-adapter";
 import { S3ArtifactStorage } from "./s3-adapter";
+import { NeonArtifactStorage } from "./neon-adapter";
 import { getAppEnv } from "@/lib/config/env";
 
-let storageInstance: IArtifactStorage | null = null;
+const globalForStorage = globalThis as unknown as {
+  artifactStorageInstance?: IArtifactStorage;
+};
 
 export function getArtifactStorage(): IArtifactStorage {
-  if (storageInstance) {
-    return storageInstance;
+  if (globalForStorage.artifactStorageInstance) {
+    return globalForStorage.artifactStorageInstance;
   }
 
   const env = getAppEnv();
-  if (env.artifactStorageProvider === "s3" && env.artifactStorageBucket && env.artifactStorageAccessKey && env.artifactStorageSecretKey) {
-    storageInstance = new S3ArtifactStorage({
+  let instance: IArtifactStorage;
+
+  if (env.artifactStorageProvider === "neon" && (env.databaseUrl || process.env.DATABASE_URL)) {
+    instance = new NeonArtifactStorage(env.databaseUrl || process.env.DATABASE_URL);
+  } else if (env.artifactStorageProvider === "s3" && env.artifactStorageBucket && env.artifactStorageAccessKey && env.artifactStorageSecretKey) {
+    instance = new S3ArtifactStorage({
       bucket: env.artifactStorageBucket,
       region: env.artifactStorageRegion,
       endpoint: env.artifactStorageEndpoint,
@@ -20,8 +27,9 @@ export function getArtifactStorage(): IArtifactStorage {
       secretAccessKey: env.artifactStorageSecretKey,
     });
   } else {
-    storageInstance = new LocalArtifactStorage(env.artifactStorageLocalDir);
+    instance = new LocalArtifactStorage(env.artifactStorageLocalDir);
   }
 
-  return storageInstance;
+  globalForStorage.artifactStorageInstance = instance;
+  return instance;
 }

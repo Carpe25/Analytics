@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { GitCommit, Search, Plus, Filter, RefreshCw } from "lucide-react";
+import { Plus, Filter, RefreshCw } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -64,11 +63,11 @@ export default function GitHubActivityPage() {
         }
       />
 
-      <div className="p-6 space-y-6">
+      <div className="w-full max-w-none px-8 py-6 space-y-8 font-sans">
         {/* Filters */}
-        <div className="py-2 border-b border-[#17212B]/15 flex flex-wrap items-center gap-3 text-xs">
+        <div className="pb-4 border-b border-[#17212B]/15 flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-1.5 font-semibold text-[#17212B]">
-            <Filter className="h-3.5 w-3.5" />
+            <Filter className="h-3.5 w-3.5 text-[#17212B]/60" />
             <span>Filters:</span>
           </div>
 
@@ -77,7 +76,7 @@ export default function GitHubActivityPage() {
             <Select
               value={filters.repo}
               onChange={(e) => setFilters((prev) => ({ ...prev, repo: e.target.value }))}
-              className="h-8 py-0"
+              className="h-8 text-xs font-medium rounded-full bg-white border-[#17212B]/20"
             >
               <option value="all">All Repositories</option>
               {repositories.map((r) => (
@@ -94,29 +93,29 @@ export default function GitHubActivityPage() {
               placeholder="Filter by author..."
               value={filters.author}
               onChange={(e) => setFilters((prev) => ({ ...prev, author: e.target.value }))}
-              className="h-8 text-xs py-0"
+              className="h-8 text-xs rounded-full bg-white border-[#17212B]/20 px-3.5"
             />
           </div>
 
           {/* Start Date */}
-          <div className="flex items-center gap-1">
-            <span className="text-[11px] text-[#17212B]/70">From:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-[#17212B]/70 font-semibold">From:</span>
             <Input
               type="date"
               value={filters.startDate}
               onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-              className="w-32 h-8 text-xs py-0"
+              className="w-36 h-8 text-xs rounded-full bg-white border-[#17212B]/20 px-3"
             />
           </div>
 
           {/* End Date */}
-          <div className="flex items-center gap-1">
-            <span className="text-[11px] text-[#17212B]/70">To:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-[#17212B]/70 font-semibold">To:</span>
             <Input
               type="date"
               value={filters.endDate}
               onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-              className="w-32 h-8 text-xs py-0"
+              className="w-36 h-8 text-xs rounded-full bg-white border-[#17212B]/20 px-3"
             />
           </div>
 
@@ -124,7 +123,7 @@ export default function GitHubActivityPage() {
             variant="ghost"
             size="sm"
             onClick={() => setFilters({ repo: "all", author: "", startDate: "", endDate: "" })}
-            className="h-8 text-xs"
+            className="h-8 text-xs rounded-full bg-white border border-[#17212B]/20 shadow-sm hover:bg-gray-50"
           >
             Reset
           </Button>

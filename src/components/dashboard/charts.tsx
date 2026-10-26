@@ -2,13 +2,11 @@
 
 import React from "react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
+  PieChart,
+  Pie,
+  Cell,
   Tooltip,
   ResponsiveContainer,
-  CartesianGrid,
 } from "recharts";
 import { ProjectSummary, DeveloperSummary, CategorySummary } from "@/types";
 
@@ -18,147 +16,141 @@ interface ChartsSectionProps {
   categories: CategorySummary[];
 }
 
+const BLUE_PALETTE = [
+  "#1D4ED8", // blue-700
+  "#2563EB", // blue-600
+  "#3B82F6", // blue-500
+  "#60A5FA", // blue-400
+  "#93C5FD", // blue-300
+  "#0284C7", // sky-600
+  "#38BDF8", // sky-400
+];
+
+function prepareTopSlices(items: { name: string; hours: number }[], maxSlices = 5) {
+  const sorted = [...items].filter((i) => i.hours > 0).sort((a, b) => b.hours - a.hours);
+  if (sorted.length <= maxSlices) {
+    return sorted;
+  }
+  const top = sorted.slice(0, maxSlices);
+  const remainingHours = Number(
+    sorted.slice(maxSlices).reduce((s, i) => s + i.hours, 0).toFixed(1)
+  );
+  if (remainingHours > 0) {
+    top.push({ name: "Others", hours: remainingHours });
+  }
+  return top;
+}
+
 export function ChartsSection({ projects, developers, categories }: ChartsSectionProps) {
-  // Sort and top 5 for neat layout
-  const projectData = [...projects]
-    .sort((a, b) => b.totalHours - a.totalHours)
-    .slice(0, 6)
-    .map((p) => ({
-      name: p.name.length > 14 ? p.name.slice(0, 12) + "..." : p.name,
-      hours: p.totalHours,
-    }));
+  const projectData = prepareTopSlices(
+    projects.map((p) => ({
+      name: p.name,
+      hours: Number(p.totalHours.toFixed(1)),
+    }))
+  );
 
-  const developerData = [...developers]
-    .sort((a, b) => b.totalHours - a.totalHours)
-    .slice(0, 6)
-    .map((d) => ({
-      name: d.name.length > 14 ? d.name.slice(0, 12) + "..." : d.name,
-      hours: d.totalHours,
-    }));
+  const developerData = prepareTopSlices(
+    developers.map((d) => ({
+      name: d.name,
+      hours: Number(d.totalHours.toFixed(1)),
+    }))
+  );
 
-  const categoryData = [...categories]
-    .sort((a, b) => b.totalHours - a.totalHours)
-    .slice(0, 6)
-    .map((c) => ({
-      name: c.name.length > 14 ? c.name.slice(0, 12) + "..." : c.name,
-      hours: c.totalHours,
-    }));
+  const categoryData = prepareTopSlices(
+    categories.map((c) => ({
+      name: c.name,
+      hours: Number(c.totalHours.toFixed(1)),
+    }))
+  );
 
-  const customTooltip = ({ active, payload, label }: any) => {
+  const customTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
+      const item = payload[0];
       return (
-        <div className="bg-[#17212B] text-[#F5F7F8] p-2 rounded text-xs shadow-md border border-[#17212B]">
-          <p className="font-semibold">{label}</p>
-          <p className="font-mono mt-0.5">{payload[0].value} hours</p>
+        <div className="bg-white text-[#17212B] p-2.5 rounded-xl border border-[#17212B]/20 shadow-lg text-xs font-sans">
+          <p className="font-semibold text-xs">{item.name}</p>
+          <p className="font-mono mt-0.5 text-blue-600 font-bold text-sm">
+            {item.value} hours
+          </p>
         </div>
       );
     }
     return null;
   };
 
+  const renderPieCard = (
+    title: string,
+    data: { name: string; hours: number }[],
+    emptyMessage: string
+  ) => {
+    const totalHours = Number(data.reduce((s, i) => s + i.hours, 0).toFixed(1));
+
+    return (
+      <div className="flex flex-col">
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#17212B]/10">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#17212B]">{title}</h3>
+          <span className="font-mono text-xs font-semibold text-[#17212B]/70">{totalHours}h</span>
+        </div>
+
+        {data.length === 0 ? (
+          <div className="h-56 flex items-center justify-center text-xs text-[#17212B]/50">
+            {emptyMessage}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center">
+            <div className="h-44 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Tooltip content={customTooltip} />
+                  <Pie
+                    data={data}
+                    dataKey="hours"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={42}
+                    outerRadius={68}
+                    paddingAngle={3}
+                    stroke="#F5F7F8"
+                    strokeWidth={2}
+                  >
+                    {data.map((entry, index) => (
+                      <Cell
+                        key={`cell-${entry.name}`}
+                        fill={BLUE_PALETTE[index % BLUE_PALETTE.length]}
+                      />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Clean White & Blue Legend */}
+            <div className="w-full flex flex-wrap gap-x-3 gap-y-1.5 justify-center mt-2 px-1">
+              {data.map((item, idx) => (
+                <div key={item.name} className="flex items-center gap-1.5 text-[11px]">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: BLUE_PALETTE[idx % BLUE_PALETTE.length] }}
+                  />
+                  <span className="text-[#17212B]/80 truncate max-w-[90px]" title={item.name}>
+                    {item.name}
+                  </span>
+                  <span className="font-mono font-semibold text-[#17212B]">{item.hours}h</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 py-2 border-b border-[#17212B]/15">
-      {/* Project Hours Chart */}
-      <div>
-        <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#17212B]/10">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#17212B]">Hours by Project</h3>
-        </div>
-        <div className="h-60">
-          {projectData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xs text-[#17212B]/50">
-              No project hours recorded
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={projectData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                <CartesianGrid stroke="rgba(23, 33, 43, 0.1)" strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fill: "#17212B", fontSize: 10 }}
-                  axisLine={{ stroke: "rgba(23, 33, 43, 0.2)" }}
-                  interval={0}
-                  angle={-20}
-                  textAnchor="end"
-                />
-                <YAxis
-                  tick={{ fill: "#17212B", fontSize: 10 }}
-                  axisLine={{ stroke: "rgba(23, 33, 43, 0.2)" }}
-                />
-                <Tooltip content={customTooltip} />
-                <Bar dataKey="hours" fill="#17212B" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* Developer Hours Chart */}
-      <div>
-        <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#17212B]/10">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#17212B]">Hours by Developer</h3>
-        </div>
-        <div className="h-60">
-          {developerData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xs text-[#17212B]/50">
-              No developer hours recorded
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={developerData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                <CartesianGrid stroke="rgba(23, 33, 43, 0.1)" strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fill: "#17212B", fontSize: 10 }}
-                  axisLine={{ stroke: "rgba(23, 33, 43, 0.2)" }}
-                  interval={0}
-                  angle={-20}
-                  textAnchor="end"
-                />
-                <YAxis
-                  tick={{ fill: "#17212B", fontSize: 10 }}
-                  axisLine={{ stroke: "rgba(23, 33, 43, 0.2)" }}
-                />
-                <Tooltip content={customTooltip} />
-                <Bar dataKey="hours" fill="#17212B" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* Category Hours Chart */}
-      <div>
-        <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#17212B]/10">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#17212B]">Hours by Category</h3>
-        </div>
-        <div className="h-60">
-          {categoryData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xs text-[#17212B]/50">
-              No category hours recorded
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={categoryData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                <CartesianGrid stroke="rgba(23, 33, 43, 0.1)" strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fill: "#17212B", fontSize: 10 }}
-                  axisLine={{ stroke: "rgba(23, 33, 43, 0.2)" }}
-                  interval={0}
-                  angle={-20}
-                  textAnchor="end"
-                />
-                <YAxis
-                  tick={{ fill: "#17212B", fontSize: 10 }}
-                  axisLine={{ stroke: "rgba(23, 33, 43, 0.2)" }}
-                />
-                <Tooltip content={customTooltip} />
-                <Bar dataKey="hours" fill="#17212B" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 py-4 border-b border-[#17212B]/15">
+      {renderPieCard("Hours by Project", projectData, "No project hours recorded")}
+      {renderPieCard("Hours by Developer", developerData, "No developer hours recorded")}
+      {renderPieCard("Hours by Category", categoryData, "No category hours recorded")}
     </div>
   );
 }

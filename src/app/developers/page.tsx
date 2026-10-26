@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DeveloperSummary, WorkLog } from "@/types";
 
@@ -37,6 +38,8 @@ export default function DevelopersPage() {
   const [developers, setDevelopers] = useState<DeveloperSummary[]>([]);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -51,6 +54,12 @@ export default function DevelopersPage() {
     if (selectedMonth && selectedMonth !== "all") {
       query.set("month", selectedMonth);
     }
+    if (startDate) {
+      query.set("startDate", startDate);
+    }
+    if (endDate) {
+      query.set("endDate", endDate);
+    }
 
     fetch(`/api/developers?${query.toString()}`)
       .then((res) => res.json())
@@ -62,17 +71,21 @@ export default function DevelopersPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [selectedMonth]);
+  }, [selectedMonth, startDate, endDate]);
 
   useEffect(() => {
     loadDevelopers();
   }, [loadDevelopers]);
 
-  const fetchDeveloperDetail = async (devId: string, month: string) => {
+  const fetchDeveloperDetail = async (devId: string, month: string, start = startDate, end = endDate) => {
     setLoadingDetail(devId);
     try {
-      const query = month && month !== "all" ? `?month=${month}` : "";
-      const res = await fetch(`/api/developers/${devId}${query}`);
+      const query = new URLSearchParams();
+      if (month && month !== "all") query.set("month", month);
+      if (start) query.set("startDate", start);
+      if (end) query.set("endDate", end);
+      const queryString = query.toString() ? `?${query.toString()}` : "";
+      const res = await fetch(`/api/developers/${devId}${queryString}`);
       const data = await res.json();
       if (!data.error) {
         setDevDetails((prev) => ({ ...prev, [devId]: data }));
@@ -91,11 +104,47 @@ export default function DevelopersPage() {
     }
 
     setExpandedDevId(devId);
-    await fetchDeveloperDetail(devId, selectedMonth);
+    await fetchDeveloperDetail(devId, selectedMonth, startDate, endDate);
   };
 
   const handleDevMonthChange = async (devId: string, newMonth: string) => {
     await fetchDeveloperDetail(devId, newMonth);
+  };
+
+  const handleMonthChange = (newMonth: string) => {
+    setSelectedMonth(newMonth);
+    setDevDetails({});
+    if (!newMonth || newMonth === "all") {
+      setStartDate("");
+      setEndDate("");
+    } else {
+      const [yearStr, monthStr] = newMonth.split("-");
+      const year = parseInt(yearStr, 10);
+      const monthNum = parseInt(monthStr, 10);
+      const lastDay = new Date(year, monthNum, 0).getDate();
+      setStartDate(`${newMonth}-01`);
+      setEndDate(`${newMonth}-${String(lastDay).padStart(2, "0")}`);
+    }
+  };
+
+  const handleStartDateChange = (val: string) => {
+    setStartDate(val);
+    setSelectedMonth("all");
+    setDevDetails({});
+  };
+
+  const handleEndDateChange = (val: string) => {
+    setEndDate(val);
+    setSelectedMonth("all");
+    setDevDetails({});
+  };
+
+  const handleResetFilters = () => {
+    setSelectedMonth("all");
+    setStartDate("");
+    setEndDate("");
+    setSearch("");
+    setDevDetails({});
   };
 
   const filtered = developers.filter((d) =>
@@ -111,24 +160,21 @@ export default function DevelopersPage() {
         onSyncComplete={loadDevelopers}
       />
 
-      <div className="p-6 max-w-7xl space-y-6">
+      <div className="w-full max-w-none px-8 py-6 space-y-8 font-sans">
         {/* Controls Bar: Flat, airy layout without boxy containers */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#17212B]/15">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#17212B]/15">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Month Filter */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-[#17212B] flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5" />
+                <Calendar className="h-3.5 w-3.5 text-[#17212B]/60" />
                 <span>Month:</span>
               </span>
-              <div className="w-48">
+              <div className="w-40">
                 <Select
                   value={selectedMonth}
-                  onChange={(e) => {
-                    setSelectedMonth(e.target.value);
-                    setDevDetails({}); // refresh cached detail views with new month
-                  }}
-                  className="h-9 text-xs font-medium"
+                  onChange={(e) => handleMonthChange(e.target.value)}
+                  className="h-8 text-xs font-medium rounded-full bg-white border-[#17212B]/20"
                 >
                   <option value="all">All Months</option>
                   {availableMonths.map((m) => (
@@ -140,20 +186,52 @@ export default function DevelopersPage() {
               </div>
             </div>
 
+            {/* From Date */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-[#17212B]/70">From:</span>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                className="w-34 h-8 text-xs py-0 rounded-full bg-white border-[#17212B]/20 px-3"
+              />
+            </div>
+
+            {/* To Date */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-[#17212B]/70">To:</span>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                className="w-34 h-8 text-xs py-0 rounded-full bg-white border-[#17212B]/20 px-3"
+              />
+            </div>
+
             {/* Search */}
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[#17212B]/40" />
+            <div className="relative w-56">
+              <Search className="absolute left-3.5 top-2.5 h-3.5 w-3.5 text-[#17212B]/40" />
               <Input
                 placeholder="Search developer..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9 text-xs"
+                className="pl-9 h-8 text-xs rounded-full bg-white border-[#17212B]/20"
               />
             </div>
+
+            {/* Reset Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetFilters}
+              className="h-8 text-xs rounded-full bg-white border border-[#17212B]/20 shadow-sm hover:bg-gray-50"
+            >
+              Reset
+            </Button>
           </div>
 
-          <div className="text-xs text-[#17212B]/70">
-            Showing records for: <strong>{formatMonthName(selectedMonth)}</strong>
+          <div className="text-xs text-[#17212B]/70 shrink-0">
+            Showing records for: <strong>{startDate && endDate ? `${startDate} to ${endDate}` : formatMonthName(selectedMonth)}</strong>
           </div>
         </div>
 

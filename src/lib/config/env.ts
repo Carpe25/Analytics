@@ -9,7 +9,8 @@ export interface AppEnv {
   githubAppId?: string;
   githubAppPrivateKey?: string;
   githubInstallationId?: string;
-  artifactStorageProvider: "local" | "s3";
+  artifactStorageProvider: "neon" | "local" | "s3";
+  databaseUrl?: string;
   artifactStorageLocalDir: string;
   artifactStorageBucket?: string;
   artifactStorageRegion: string;
@@ -38,6 +39,14 @@ export function getAppEnv(): AppEnv {
     privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----\n`;
   }
 
+  const dbUrl = process.env.DATABASE_URL;
+  let provider: "neon" | "local" | "s3" = "local";
+  if (process.env.ARTIFACT_STORAGE_PROVIDER === "neon" || (dbUrl && process.env.ARTIFACT_STORAGE_PROVIDER !== "local" && process.env.ARTIFACT_STORAGE_PROVIDER !== "s3")) {
+    provider = "neon";
+  } else if (process.env.ARTIFACT_STORAGE_PROVIDER === "s3") {
+    provider = "s3";
+  }
+
   return {
     appBaseUrl: process.env.APP_BASE_URL || "http://localhost:3000",
     appTimezone: process.env.APP_TIMEZONE || "Asia/Kolkata",
@@ -49,7 +58,8 @@ export function getAppEnv(): AppEnv {
     githubAppId: process.env.GITHUB_APP_ID,
     githubAppPrivateKey: process.env.GITHUB_APP_PRIVATE_KEY,
     githubInstallationId: process.env.GITHUB_INSTALLATION_ID,
-    artifactStorageProvider: (process.env.ARTIFACT_STORAGE_PROVIDER as any) === "s3" ? "s3" : "local",
+    artifactStorageProvider: provider,
+    databaseUrl: dbUrl,
     artifactStorageLocalDir: process.env.ARTIFACT_STORAGE_LOCAL_DIR || ".artifacts",
     artifactStorageBucket: process.env.ARTIFACT_STORAGE_BUCKET,
     artifactStorageRegion: process.env.ARTIFACT_STORAGE_REGION || "us-east-1",
@@ -77,6 +87,7 @@ export function checkConfigurationStatus() {
   );
 
   const storageConfigured =
+    (env.artifactStorageProvider === "neon" && Boolean(env.databaseUrl)) ||
     env.artifactStorageProvider === "local" ||
     (env.artifactStorageProvider === "s3" &&
       Boolean(env.artifactStorageBucket && env.artifactStorageAccessKey && env.artifactStorageSecretKey));

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { FolderGit2, GitCommit, FileText, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
+import { GitCommit, FileText, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { ChartsSection } from "@/components/dashboard/charts";
@@ -84,7 +84,7 @@ export default function OverviewPage() {
         onSyncComplete={loadData}
       />
 
-      <div className="p-6 max-w-7xl space-y-6">
+      <div className="w-full max-w-none px-8 py-6 space-y-8 font-sans">
         {loading && !snapshot ? (
           <div className="p-12 text-center text-xs text-[#17212B]/60">
             <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 opacity-50" />

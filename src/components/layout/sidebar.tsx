@@ -51,10 +51,10 @@ export function Sidebar() {
   return (
     <aside className="w-64 border-r border-[#17212B]/15 bg-[#F5F7F8] flex flex-col justify-between shrink-0 min-h-screen">
       <div>
-        {/* Brand Header */}
-        <div className="p-5 border-b border-[#17212B]/15">
+        {/* Brand Header: Aligned with main window Header */}
+        <div className="h-[73px] px-6 border-b border-[#17212B]/15 flex items-center shrink-0">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded bg-[#17212B] flex items-center justify-center text-[#F5F7F8] font-bold text-sm tracking-wider">
+            <div className="h-8 w-8 rounded-full bg-white border border-[#17212B]/20 shadow-sm flex items-center justify-center text-[#17212B] font-bold text-xs tracking-wider">
               PA
             </div>
             <div>
@@ -79,17 +79,17 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center justify-between px-3 py-2 text-xs font-medium rounded transition-colors",
+                  "flex items-center justify-between px-3.5 py-2 text-xs font-medium rounded-full transition-all",
                   isActive
-                    ? "bg-[#17212B] text-[#F5F7F8]"
-                    : "text-[#17212B] hover:bg-[#17212B]/10"
+                    ? "bg-white text-[#17212B] border border-[#17212B]/15 shadow-sm font-semibold"
+                    : "text-[#17212B]/75 hover:bg-white/70 hover:text-[#17212B]"
                 )}
               >
                 <div className="flex items-center gap-2.5">
                   <Icon className="h-4 w-4" />
                   <span>{item.label}</span>
                 </div>
-                {isActive && <ChevronRight className="h-3.5 w-3.5 opacity-70" />}
+                {isActive && <ChevronRight className="h-3.5 w-3.5 text-[#17212B]/60" />}
               </Link>
             );
           })}
@@ -97,7 +97,7 @@ export function Sidebar() {
       </div>
 
       {/* Sync Status Footer */}
-      <div className="p-4 m-3 rounded border border-[#17212B]/15 bg-[#17212B]/5 text-xs text-[#17212B]">
+      <div className="p-4 m-3 rounded-2xl border border-[#17212B]/15 bg-white shadow-sm text-xs text-[#17212B]">
         <div className="flex items-center gap-1.5 font-semibold text-[11px] mb-1.5">
           <Clock className="h-3.5 w-3.5" />
           <span>Nightly Sync: 11:59 PM</span>

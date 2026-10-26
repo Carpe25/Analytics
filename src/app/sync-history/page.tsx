@@ -3,10 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { History, CheckCircle2, AlertTriangle, XCircle, Clock, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { formatDateTimeInTimezone } from "@/lib/utils";
 import { SyncRun } from "@/types";
 
@@ -53,9 +51,8 @@ export default function SyncHistoryPage() {
         onSyncComplete={loadHistory}
       />
 
-      <div className="p-6 space-y-6">
-        <Card className="border-[#17212B]/15 bg-[#F5F7F8]">
-          <CardContent className="p-0">
+      <div className="w-full max-w-none px-8 py-6 space-y-8 font-sans">
+        <div className="overflow-x-auto">
             {loading ? (
               <div className="p-8 text-center text-xs text-[#17212B]/60">Loading sync history...</div>
             ) : history.length === 0 ? (
@@ -199,8 +196,7 @@ export default function SyncHistoryPage() {
                 </TableBody>
               </Table>
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </div>
   );

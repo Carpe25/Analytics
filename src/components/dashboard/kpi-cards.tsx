@@ -1,5 +1,4 @@
-import React from "react";
-import { Clock, FolderGit2, Users, FileText, CheckCircle2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { formatDateTimeInTimezone } from "@/lib/utils";
 
 interface KpiCardsProps {

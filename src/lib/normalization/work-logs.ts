@@ -154,6 +154,7 @@ export function normalizeSheetRows(
   columnMapping: {
     date: string;
     developer?: string;
+    client?: string;
     project: string;
     category: string;
     duration: string;
@@ -179,6 +180,9 @@ export function normalizeSheetRows(
     }
 
     const dateCol = findColumnIndex(headers, columnMapping.date);
+    const clientCol = columnMapping.client
+      ? findColumnIndex(headers, columnMapping.client)
+      : findColumnIndex(headers, "Client");
     const projCol = findColumnIndex(headers, columnMapping.project);
     const catCol = findColumnIndex(headers, columnMapping.category);
     const durCol = findColumnIndex(headers, columnMapping.duration);
@@ -227,7 +231,17 @@ export function normalizeSheetRows(
     const rawProject = projCol >= 0 ? String(rowValues[projCol] || "").trim() : "";
     const { projectId, projectName } = matchProject(rawProject, projects);
 
-    const category = catCol >= 0 ? String(rowValues[catCol] || "").trim() || "Development" : "Development";
+    let client = clientCol >= 0 && rowValues[clientCol] ? String(rowValues[clientCol]).trim() : "";
+    if (client.toLowerCase() === "oromond") {
+      client = "Oramond";
+    }
+    if (!client) {
+      client = "Unassigned";
+    }
+
+    const category = catCol >= 0 && rowValues[catCol] && String(rowValues[catCol]).trim()
+      ? String(rowValues[catCol]).trim()
+      : "Uncategorized";
     const description = descCol >= 0 ? String(rowValues[descCol] || "").trim() : "";
     const taskTicketId = ticketCol >= 0 ? String(rowValues[ticketCol] || "").trim() || undefined : undefined;
     const explicitLogId = logIdCol >= 0 ? String(rowValues[logIdCol] || "").trim() : "";
@@ -247,6 +261,7 @@ export function normalizeSheetRows(
       developerName,
       projectId,
       projectName,
+      client,
       category,
       durationMinutes: durationParsed.minutes,
       hours: durationParsed.hours,

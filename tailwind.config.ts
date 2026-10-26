@@ -45,7 +45,7 @@ const config: Config = {
         ring: "#17212B",
       },
       fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        sans: ["Arial", "Helvetica", "sans-serif"],
       },
     },
   },
