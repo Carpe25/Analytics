@@ -20,6 +20,13 @@
 !package.json
 !tsconfig.json
 !components.json
+!.agents/**
+!.cursor/**
+!mcp-presets/**
+!mcp-server/package.json
+!mcp-server/tsconfig.json
+mcp-server/node_modules/
+mcp-server/build/
 
 # Local env files
 .env

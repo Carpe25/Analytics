@@ -1,4 +1,4 @@
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog } from "@/types";
 
 export interface SyncLockInfo {
   runId: string;
@@ -17,4 +17,6 @@ export interface IArtifactStorage {
   releaseSyncLock(runId: string): Promise<void>;
   readIntegrationSettings(): Promise<IntegrationSettings | null>;
   writeIntegrationSettings(settings: IntegrationSettings): Promise<void>;
+  insertWorkLog?(log: WorkLog): Promise<void>;
+  getMcpWorkLogs?(): Promise<WorkLog[]>;
 }

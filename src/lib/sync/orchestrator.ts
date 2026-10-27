@@ -6,7 +6,7 @@ import { fetchAllProjectCommits } from "@/lib/github/commits";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { getAppEnv } from "@/lib/config/env";
 import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog } from "@/types";
 
 export interface SyncExecutionResult {
   run: SyncRun;
@@ -116,9 +116,32 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
       syncRun.warnings.push(...githubResult.warnings);
     }
 
+    // Step 7b: Preserve MCP and system-logged work logs
+    let mcpLogs: WorkLog[] = [];
+    try {
+      if (storage.getMcpWorkLogs) {
+        mcpLogs = await storage.getMcpWorkLogs();
+      } else {
+        const prevSnapshot = await storage.readLatestAnalytics();
+        mcpLogs = (prevSnapshot?.workLogs || []).filter((l) => l.sourceTab === "MCP");
+      }
+    } catch (mcpErr) {
+      console.warn("Could not retrieve MCP logs for merging during sync:", mcpErr);
+    }
+
+    // Merge Google Sheets logs and MCP logs (preserving uniqueness by log id)
+    const combinedLogMap = new Map<string, WorkLog>();
+    for (const l of normResult.acceptedLogs) {
+      combinedLogMap.set(l.id, l);
+    }
+    for (const l of mcpLogs) {
+      combinedLogMap.set(l.id, l);
+    }
+    const allWorkLogs = Array.from(combinedLogMap.values());
+
     // Step 8: Calculate Aggregates
     const aggResult = computeAnalytics(
-      normResult.acceptedLogs,
+      allWorkLogs,
       githubResult.commits,
       settings.projects,
       settings.developerGithubMapping
@@ -137,7 +160,7 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
       projects: aggResult.projects,
       developers: aggResult.developers,
       categories: aggResult.categories,
-      workLogs: normResult.acceptedLogs,
+      workLogs: allWorkLogs,
       githubCommits: githubResult.commits,
       githubRepositories: aggResult.githubRepositories,
       warnings: syncRun.warnings,

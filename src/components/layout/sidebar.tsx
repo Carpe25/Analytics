@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn, formatDateTimeInTimezone } from "@/lib/utils";
+import { useSyncStatus } from "@/lib/events/sync-bus";
 
 const NAV_ITEMS = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
@@ -29,24 +30,7 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [syncStatus, setSyncStatus] = useState<{
-    lastSuccessfulSync?: string;
-    status?: string;
-    timezone?: string;
-  }>({});
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((res) => res.json())
-      .then((data) => {
-        setSyncStatus({
-          lastSuccessfulSync: data?.storage?.lastSuccessfulSyncAtUtc,
-          status: data?.storage?.hasLatestSnapshot ? "Snapshot active" : "No snapshot yet",
-          timezone: data?.config?.appTimezone || "Asia/Kolkata",
-        });
-      })
-      .catch(() => {});
-  }, [pathname]);
+  const syncStatus = useSyncStatus();
 
   return (
     <aside className="w-64 border-r border-[#17212B]/15 bg-[#F5F7F8] flex flex-col justify-between shrink-0 min-h-screen">

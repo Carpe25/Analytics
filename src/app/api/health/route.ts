@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { checkConfigurationStatus } from "@/lib/config/env";
 import { getArtifactStorage } from "@/lib/storage/provider";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   const config = checkConfigurationStatus();
   const storage = getArtifactStorage();

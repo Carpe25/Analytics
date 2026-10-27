@@ -1,0 +1,23 @@
+{
+  "name": "tracker-mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) server for Analytics System work logging",
+  "main": "build/index.js",
+  "type": "module",
+  "bin": {
+    "tracker-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "watch": "tsc -w"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "typescript": "^5.6.3"
+  }
+}

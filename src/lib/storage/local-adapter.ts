@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { IArtifactStorage, SyncLockInfo } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 export class LocalArtifactStorage implements IArtifactStorage {
@@ -58,6 +58,10 @@ export class LocalArtifactStorage implements IArtifactStorage {
     // Verify JSON before writing
     JSON.parse(content);
     await this.atomicWrite(this.latestFilePath, content);
+  }
+
+  async insertWorkLog(log: WorkLog): Promise<void> {
+    // Snapshot-based storage handles persistence in publishLatestAnalytics
   }
 
   async writeAnalyticsSnapshot(snapshot: AnalyticsSnapshot, dateKey: string): Promise<void> {
@@ -161,5 +165,10 @@ export class LocalArtifactStorage implements IArtifactStorage {
   async writeIntegrationSettings(settings: IntegrationSettings): Promise<void> {
     const validated = IntegrationSettingsSchema.parse(settings);
     await this.atomicWrite(this.settingsFilePath, JSON.stringify(validated, null, 2));
+  }
+
+  async getMcpWorkLogs(): Promise<WorkLog[]> {
+    const snap = await this.readLatestAnalytics();
+    return (snap?.workLogs || []).filter((l) => l.sourceTab === "MCP");
   }
 }

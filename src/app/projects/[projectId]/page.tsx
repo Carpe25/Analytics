@@ -55,31 +55,19 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
     }
 
     try {
-      const res = await fetch("/api/settings");
-      const json = await res.json();
-      if (!json?.settings) return;
-
-      const updatedProjects = json.settings.projects.map((p: any) => {
-        if (p.id === projectId) {
-          return {
-            ...p,
-            githubRepos: (p.githubRepos || []).filter(
-              (r: any) => !(r.owner.toLowerCase() === owner.toLowerCase() && r.repo.toLowerCase() === repo.toLowerCase())
-            ),
-          };
-        }
-        return p;
-      });
-
-      await fetch("/api/settings", {
-        method: "POST",
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/repos`, {
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...json.settings, projects: updatedProjects }),
+        body: JSON.stringify({ owner, repo }),
       });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to disconnect repository");
+      }
 
       loadProjectDetails();
-    } catch (err) {
-      alert("Failed to disconnect repository");
+    } catch (err: any) {
+      alert(err.message || "Failed to disconnect repository");
     }
   };
 
