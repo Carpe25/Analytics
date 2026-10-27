@@ -5,6 +5,20 @@ import { IArtifactStorage } from "./interface";
 import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelayMs = 300): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      attempt++;
+      if (attempt >= maxRetries) throw err;
+      const delay = initialDelayMs * Math.pow(2, attempt - 1);
+      await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+}
+
 export class NeonArtifactStorage implements IArtifactStorage {
   private sql: NeonQueryFunction<false, false>;
   private databaseUrl: string;
@@ -127,14 +141,14 @@ export class NeonArtifactStorage implements IArtifactStorage {
     this.cachedSnapshot = validated as AnalyticsSnapshot;
     this.snapshotCachedAt = Date.now();
 
-    // Persist snapshot JSON to Neon
-    await this.sql`
+    // Persist snapshot JSON to Neon with retry
+    await withRetry(() => this.sql`
       INSERT INTO analytics_snapshots (id, snapshot_json, updated_at)
       VALUES ('latest', ${JSON.stringify(validated)}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         snapshot_json = EXCLUDED.snapshot_json,
         updated_at = NOW();
-    `;
+    `);
 
     // Asynchronously update relational work_logs and github_commits in Neon
     this.syncRelationalTables(validated as AnalyticsSnapshot).catch((err) => {
@@ -145,53 +159,102 @@ export class NeonArtifactStorage implements IArtifactStorage {
   private async syncRelationalTables(snapshot: AnalyticsSnapshot): Promise<void> {
     try {
       if (snapshot.workLogs && snapshot.workLogs.length > 0) {
-        const batchSize = 25;
-        for (let i = 0; i < snapshot.workLogs.length; i += batchSize) {
-          const batch = snapshot.workLogs.slice(i, i + batchSize);
-          await Promise.all(batch.map((log: WorkLog) => {
-            const sourceRow = log.sourceRowIndex ?? (log as any).sourceRow ?? 0;
-            const sourceTab = log.sourceTab || "unknown";
-            return this.sql`
-              INSERT INTO work_logs (
-                id, developer_id, developer_name, project_id, project_name,
-                client, date, duration_minutes, category, description,
-                task_ticket_id, status, source_tab, source_row, raw_json
-              ) VALUES (
-                ${log.id}, ${log.developerId}, ${log.developerName}, ${log.projectId}, ${log.projectName},
-                ${log.client || null}, ${log.date}, ${log.durationMinutes}, ${log.category}, ${log.description || ""},
-                ${log.taskTicketId || null}, ${(log as any).status || null}, ${sourceTab}, ${sourceRow},
-                ${JSON.stringify(log)}
-              )
-              ON CONFLICT (id) DO UPDATE SET
-                duration_minutes = EXCLUDED.duration_minutes,
-                category = EXCLUDED.category,
-                description = EXCLUDED.description,
-                client = EXCLUDED.client;
-            `;
-          }));
+        const chunkSize = 100;
+        for (let i = 0; i < snapshot.workLogs.length; i += chunkSize) {
+          const chunk = snapshot.workLogs.slice(i, i + chunkSize);
+          const ids = chunk.map((l) => l.id);
+          const devIds = chunk.map((l) => l.developerId);
+          const devNames = chunk.map((l) => l.developerName);
+          const projIds = chunk.map((l) => l.projectId);
+          const projNames = chunk.map((l) => l.projectName);
+          const clients = chunk.map((l) => l.client || null);
+          const dates = chunk.map((l) => l.date);
+          const durations = chunk.map((l) => l.durationMinutes);
+          const categories = chunk.map((l) => l.category);
+          const descs = chunk.map((l) => l.description || "");
+          const taskTicketIds = chunk.map((l) => l.taskTicketId || null);
+          const statuses = chunk.map((l) => (l as any).status || null);
+          const sourceTabs = chunk.map((l) => l.sourceTab || "unknown");
+          const sourceRows = chunk.map((l) => l.sourceRowIndex ?? (l as any).sourceRow ?? 0);
+          const rawJsons = chunk.map((l) => JSON.stringify(l));
+
+          await withRetry(() => this.sql`
+            INSERT INTO work_logs (
+              id, developer_id, developer_name, project_id, project_name,
+              client, date, duration_minutes, category, description,
+              task_ticket_id, status, source_tab, source_row, raw_json
+            )
+            SELECT * FROM UNNEST(
+              ${ids}::varchar[],
+              ${devIds}::varchar[],
+              ${devNames}::varchar[],
+              ${projIds}::varchar[],
+              ${projNames}::varchar[],
+              ${clients}::varchar[],
+              ${dates}::varchar[],
+              ${durations}::int[],
+              ${categories}::varchar[],
+              ${descs}::text[],
+              ${taskTicketIds}::varchar[],
+              ${statuses}::varchar[],
+              ${sourceTabs}::varchar[],
+              ${sourceRows}::int[],
+              ${rawJsons}::jsonb[]
+            )
+            ON CONFLICT (id) DO UPDATE SET
+              duration_minutes = EXCLUDED.duration_minutes,
+              category = EXCLUDED.category,
+              description = EXCLUDED.description,
+              client = EXCLUDED.client;
+          `);
         }
       }
 
       if (snapshot.githubCommits && snapshot.githubCommits.length > 0) {
-        const batchSize = 25;
-        for (let i = 0; i < snapshot.githubCommits.length; i += batchSize) {
-          const batch = snapshot.githubCommits.slice(i, i + batchSize);
-          await Promise.all(batch.map((c: GitHubCommit) => {
-            const commitId = `${c.repoFullName}_${c.sha}`;
-            return this.sql`
-              INSERT INTO github_commits (
-                id, project_id, repo_full_name, sha, short_sha,
-                message, author_name, author_login, author_email,
-                commit_date_utc, commit_date_local, commit_url, branch, branches, raw_json
-              ) VALUES (
-                ${commitId}, ${c.projectId}, ${c.repoFullName}, ${c.sha}, ${c.shortSha},
-                ${c.message}, ${c.authorName}, ${c.authorLogin || null}, ${c.authorEmail || null},
-                ${c.commitDateUtc}, ${c.commitDateLocal}, ${c.commitUrl}, ${c.branch || null},
-                ${JSON.stringify(c.branches || [])}, ${JSON.stringify(c)}
-              )
-              ON CONFLICT (id) DO NOTHING;
-            `;
-          }));
+        const chunkSize = 100;
+        for (let i = 0; i < snapshot.githubCommits.length; i += chunkSize) {
+          const chunk = snapshot.githubCommits.slice(i, i + chunkSize);
+          const ids = chunk.map((c) => `${c.repoFullName}_${c.sha}`);
+          const projectIds = chunk.map((c) => c.projectId);
+          const repoFullNames = chunk.map((c) => c.repoFullName);
+          const shas = chunk.map((c) => c.sha);
+          const shortShas = chunk.map((c) => c.shortSha);
+          const messages = chunk.map((c) => c.message);
+          const authorNames = chunk.map((c) => c.authorName);
+          const authorLogins = chunk.map((c) => c.authorLogin || null);
+          const authorEmails = chunk.map((c) => c.authorEmail || null);
+          const commitDateUtcs = chunk.map((c) => c.commitDateUtc);
+          const commitDateLocals = chunk.map((c) => c.commitDateLocal);
+          const commitUrls = chunk.map((c) => c.commitUrl);
+          const branches = chunk.map((c) => c.branch || null);
+          const branchesJsons = chunk.map((c) => JSON.stringify(c.branches || []));
+          const rawJsons = chunk.map((c) => JSON.stringify(c));
+
+          await withRetry(() => this.sql`
+            INSERT INTO github_commits (
+              id, project_id, repo_full_name, sha, short_sha,
+              message, author_name, author_login, author_email,
+              commit_date_utc, commit_date_local, commit_url, branch, branches, raw_json
+            )
+            SELECT * FROM UNNEST(
+              ${ids}::varchar[],
+              ${projectIds}::varchar[],
+              ${repoFullNames}::varchar[],
+              ${shas}::varchar[],
+              ${shortShas}::varchar[],
+              ${messages}::text[],
+              ${authorNames}::varchar[],
+              ${authorLogins}::varchar[],
+              ${authorEmails}::varchar[],
+              ${commitDateUtcs}::varchar[],
+              ${commitDateLocals}::varchar[],
+              ${commitUrls}::varchar[],
+              ${branches}::varchar[],
+              ${branchesJsons}::jsonb[],
+              ${rawJsons}::jsonb[]
+            )
+            ON CONFLICT (id) DO NOTHING;
+          `);
         }
       }
     } catch (err) {
@@ -199,19 +262,55 @@ export class NeonArtifactStorage implements IArtifactStorage {
     }
   }
 
+  async insertWorkLog(log: WorkLog): Promise<void> {
+    const sourceRow = log.sourceRowIndex ?? 0;
+    const sourceTab = log.sourceTab || "MCP";
+    await withRetry(() => this.sql`
+      INSERT INTO work_logs (
+        id, developer_id, developer_name, project_id, project_name,
+        client, date, duration_minutes, category, description,
+        task_ticket_id, status, source_tab, source_row, raw_json
+      ) VALUES (
+        ${log.id}, ${log.developerId}, ${log.developerName}, ${log.projectId}, ${log.projectName},
+        ${log.client || null}, ${log.date}, ${log.durationMinutes}, ${log.category}, ${log.description || ""},
+        ${log.taskTicketId || null}, ${(log as any).status || null}, ${sourceTab}, ${sourceRow},
+        ${JSON.stringify(log)}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        duration_minutes = EXCLUDED.duration_minutes,
+        category = EXCLUDED.category,
+        description = EXCLUDED.description,
+        client = EXCLUDED.client;
+    `);
+  }
+
+  async getMcpWorkLogs(): Promise<WorkLog[]> {
+    try {
+      const rows = await withRetry(() => this.sql`
+        SELECT raw_json FROM work_logs WHERE source_tab = 'MCP'
+      `);
+      return rows.map((r: any) =>
+        typeof r.raw_json === "string" ? JSON.parse(r.raw_json) : r.raw_json
+      );
+    } catch (err) {
+      console.warn("Could not query MCP logs from Neon relational table:", err);
+      return (this.cachedSnapshot?.workLogs || []).filter((l) => l.sourceTab === "MCP");
+    }
+  }
+
   async writeAnalyticsSnapshot(snapshot: AnalyticsSnapshot, dateKey: string): Promise<void> {
     const validated = AnalyticsSnapshotSchema.parse(snapshot);
-    await this.sql`
+    await withRetry(() => this.sql`
       INSERT INTO analytics_snapshots (id, snapshot_json, updated_at)
       VALUES (${dateKey}, ${JSON.stringify(validated)}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         snapshot_json = EXCLUDED.snapshot_json,
         updated_at = NOW();
-    `;
+    `);
   }
 
   async appendSyncHistory(run: SyncRun): Promise<void> {
-    await this.sql`
+    await withRetry(() => this.sql`
       INSERT INTO sync_runs (
         run_id, trigger_type, started_at, completed_at, duration_ms,
         status, rows_read, rows_accepted, rows_ignored, rows_rejected,
@@ -230,16 +329,16 @@ export class NeonArtifactStorage implements IArtifactStorage {
         rows_accepted = EXCLUDED.rows_accepted,
         errors = EXCLUDED.errors,
         warnings = EXCLUDED.warnings;
-    `;
+    `);
   }
 
   async readSyncHistory(limit: number = 50): Promise<SyncRun[]> {
     try {
-      const rows = await this.sql`
+      const rows = await withRetry(() => this.sql`
         SELECT * FROM sync_runs
         ORDER BY started_at DESC
         LIMIT ${limit};
-      `;
+      `);
 
       return rows.map((r: any) => ({
         runId: r.run_id,
@@ -271,9 +370,9 @@ export class NeonArtifactStorage implements IArtifactStorage {
 
     try {
       // Check existing lock
-      const existing = await this.sql`
+      const existing = await withRetry(() => this.sql`
         SELECT * FROM sync_locks WHERE id = 'sync_lock' LIMIT 1;
-      `;
+      `);
 
       if (existing.length > 0) {
         const lock = existing[0];
@@ -285,14 +384,14 @@ export class NeonArtifactStorage implements IArtifactStorage {
       }
 
       // Upsert lock
-      await this.sql`
+      await withRetry(() => this.sql`
         INSERT INTO sync_locks (id, run_id, locked_at, expires_at)
         VALUES ('sync_lock', ${runId}, ${now.toISOString()}, ${expiresAt.toISOString()})
         ON CONFLICT (id) DO UPDATE SET
           run_id = EXCLUDED.run_id,
           locked_at = EXCLUDED.locked_at,
           expires_at = EXCLUDED.expires_at;
-      `;
+      `);
       return true;
     } catch (err) {
       console.error("Error acquiring sync lock in Neon:", err);
@@ -302,10 +401,10 @@ export class NeonArtifactStorage implements IArtifactStorage {
 
   async releaseSyncLock(runId: string): Promise<void> {
     try {
-      await this.sql`
+      await withRetry(() => this.sql`
         DELETE FROM sync_locks
         WHERE id = 'sync_lock' AND run_id = ${runId};
-      `;
+      `);
     } catch (err) {
       console.error("Error releasing sync lock in Neon:", err);
     }
@@ -359,12 +458,12 @@ export class NeonArtifactStorage implements IArtifactStorage {
     this.cachedSettings = validated as IntegrationSettings;
     this.settingsCachedAt = Date.now();
 
-    await this.sql`
+    await withRetry(() => this.sql`
       INSERT INTO integration_settings (id, settings_json, updated_at)
       VALUES ('default', ${JSON.stringify(validated)}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         settings_json = EXCLUDED.settings_json,
         updated_at = NOW();
-    `;
+    `);
   }
 }

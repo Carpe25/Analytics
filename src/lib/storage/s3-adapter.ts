@@ -1,6 +1,6 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { IArtifactStorage, SyncLockInfo } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 export class S3ArtifactStorage implements IArtifactStorage {
@@ -78,6 +78,10 @@ export class S3ArtifactStorage implements IArtifactStorage {
   async publishLatestAnalytics(snapshot: AnalyticsSnapshot): Promise<void> {
     const validated = AnalyticsSnapshotSchema.parse(snapshot);
     await this.putObjectString("analytics/latest.json", JSON.stringify(validated, null, 2));
+  }
+
+  async insertWorkLog(log: WorkLog): Promise<void> {
+    // S3 uses latest.json snapshot persistence
   }
 
   async writeAnalyticsSnapshot(snapshot: AnalyticsSnapshot, dateKey: string): Promise<void> {
@@ -168,5 +172,10 @@ export class S3ArtifactStorage implements IArtifactStorage {
   async writeIntegrationSettings(settings: IntegrationSettings): Promise<void> {
     const validated = IntegrationSettingsSchema.parse(settings);
     await this.putObjectString("config/settings.json", JSON.stringify(validated, null, 2));
+  }
+
+  async getMcpWorkLogs(): Promise<WorkLog[]> {
+    const snap = await this.readLatestAnalytics();
+    return (snap?.workLogs || []).filter((l) => l.sourceTab === "MCP");
   }
 }

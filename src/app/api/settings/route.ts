@@ -3,6 +3,9 @@ import { getArtifactStorage } from "@/lib/storage/provider";
 import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
 import { IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   const storage = getArtifactStorage();
   await storage.init();

@@ -13,7 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { IntegrationSettings } from "@/types";
+import { notifySyncCompleted } from "@/lib/events/sync-bus";
+
+interface ProjectOption {
+  id: string;
+  name: string;
+  code?: string;
+  client?: string;
+}
 
 interface ConnectRepoDialogProps {
   isOpen: boolean;
@@ -28,7 +35,7 @@ export function ConnectRepoDialog({
   defaultProjectId,
   onSuccess,
 }: ConnectRepoDialogProps) {
-  const [settings, setSettings] = useState<IntegrationSettings | null>(null);
+  const [projectsList, setProjectsList] = useState<ProjectOption[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(defaultProjectId || "");
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
@@ -39,20 +46,26 @@ export function ConnectRepoDialog({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (defaultProjectId) {
+      setSelectedProjectId(defaultProjectId);
+    }
+  }, [defaultProjectId]);
+
+  useEffect(() => {
     if (isOpen) {
-      fetch("/api/settings")
+      fetch("/api/projects")
         .then((res) => res.json())
         .then((data) => {
-          if (data?.settings) {
-            setSettings(data.settings);
-            if (!selectedProjectId && data.settings.projects.length > 0) {
-              setSelectedProjectId(defaultProjectId || data.settings.projects[0].id);
+          if (data?.projects && Array.isArray(data.projects)) {
+            setProjectsList(data.projects);
+            if (!selectedProjectId && !defaultProjectId && data.projects.length > 0) {
+              setSelectedProjectId(data.projects[0].id);
             }
           }
         })
         .catch(() => {});
     }
-  }, [isOpen, defaultProjectId]);
+  }, [isOpen, defaultProjectId, selectedProjectId]);
 
   const handleTestConnection = async () => {
     if (!owner.trim() || !repo.trim()) {
@@ -81,7 +94,8 @@ export function ConnectRepoDialog({
   };
 
   const handleSaveConnection = async () => {
-    if (!selectedProjectId) {
+    const targetId = selectedProjectId || defaultProjectId;
+    if (!targetId) {
       setSaveError("Please select a project to connect.");
       return;
     }
@@ -94,42 +108,14 @@ export function ConnectRepoDialog({
     setSaveError(null);
 
     try {
-      if (!settings) throw new Error("Settings not loaded.");
-
-      const updatedProjects = settings.projects.map((p) => {
-        if (p.id === selectedProjectId) {
-          const existingRepos = p.githubRepos || [];
-          // Avoid duplicates
-          const alreadyExists = existingRepos.some(
-            (r) => r.owner.toLowerCase() === owner.trim().toLowerCase() && r.repo.toLowerCase() === repo.trim().toLowerCase()
-          );
-          if (alreadyExists) {
-            return p;
-          }
-          return {
-            ...p,
-            githubRepos: [
-              ...existingRepos,
-              {
-                owner: owner.trim(),
-                repo: repo.trim(),
-                defaultBranch: branch.trim() || "main",
-              },
-            ],
-          };
-        }
-        return p;
-      });
-
-      const updatedSettings: IntegrationSettings = {
-        ...settings,
-        projects: updatedProjects,
-      };
-
-      const res = await fetch("/api/settings", {
+      const res = await fetch(`/api/projects/${encodeURIComponent(targetId)}/repos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedSettings),
+        body: JSON.stringify({
+          owner: owner.trim(),
+          repo: repo.trim(),
+          defaultBranch: branch.trim() || "main",
+        }),
       });
 
       const data = await res.json();
@@ -137,6 +123,7 @@ export function ConnectRepoDialog({
         throw new Error(data.error || "Failed to save repository connection.");
       }
 
+      notifySyncCompleted({ timestamp: new Date().toISOString() });
       setOwner("");
       setRepo("");
       setTestResult(null);
@@ -167,13 +154,13 @@ export function ConnectRepoDialog({
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-[#17212B]">Project</label>
             <Select
-              value={selectedProjectId}
+              value={selectedProjectId || defaultProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
               disabled={Boolean(defaultProjectId)}
             >
-              {(settings?.projects || []).map((p) => (
+              {projectsList.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} {p.code ? `(${p.code})` : ""}
+                  {p.client ? `[${p.client}] ` : ""}{p.name} {p.code ? `(${p.code})` : ""}
                 </option>
               ))}
             </Select>

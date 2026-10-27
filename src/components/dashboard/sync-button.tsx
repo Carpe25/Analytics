@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { notifySyncCompleted } from "@/lib/events/sync-bus";
 
 interface SyncButtonProps {
   onSyncComplete?: () => void;
@@ -34,6 +35,15 @@ export function SyncButton({ onSyncComplete, variant = "default", size = "defaul
 
       const rowsCount = data.run?.rowsAccepted ?? 0;
       const commitsCount = data.run?.commitsFetched ?? 0;
+      const finishedAt = data.run?.finishedAt || new Date().toISOString();
+
+      notifySyncCompleted({
+        timestamp: finishedAt,
+        runId: data.run?.runId,
+        rowsAccepted: rowsCount,
+        commitsFetched: commitsCount,
+      });
+
       setStatusMessage({
         text: `Sync completed: ${rowsCount} logs accepted, ${commitsCount} commits synced.`,
         isError: false,
