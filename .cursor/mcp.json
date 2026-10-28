@@ -4,7 +4,7 @@
       "command": "node",
       "args": ["/home/jay/Desktop/my projects/Analytics system/mcp-server/build/index.js"],
       "env": {
-        "TRACKER_API_URL": "http://localhost:3000/api",
+        "TRACKER_API_URL": "https://analytics-two-ashen.vercel.app/api",
         "DEVELOPER_NAME": "Jay"
       }
     }
