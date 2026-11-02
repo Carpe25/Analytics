@@ -3,7 +3,7 @@ export interface TrackerConfig {
   apiKey?: string;
   developerName?: string;
 }
-
+//My comment to see the Jays work.
 export function getTrackerConfig(): TrackerConfig {
   let apiUrl = process.env.TRACKER_API_URL?.trim() || "https://analytics-two-ashen.vercel.app/api";
   apiUrl = apiUrl.replace(/\/+$/, "");
