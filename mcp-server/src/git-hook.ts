@@ -1,8 +1,12 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { fileURLToPath } from "url";
 import { TrackerApiClient } from "./api-client.js";
 import { autoLogCurrentGitCommit, runGitCommand } from "./git-engine.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export async function handleGitHookExecution(args: string[]) {
   const client = new TrackerApiClient();
