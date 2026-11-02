@@ -97,6 +97,41 @@ export class TrackerApiClient {
     return data;
   }
 
+  async logCommitWork(payload: {
+    repoOwner?: string;
+    repoName?: string;
+    repoFullName?: string;
+    commitSha: string;
+    shortSha?: string;
+    branch?: string;
+    message: string;
+    authorName: string;
+    authorEmail?: string;
+    commitTimestamp?: number | string;
+    previousCommitTimestamp?: number | string;
+    category?: string;
+    client?: string;
+    project?: string;
+    taskTicketId?: string;
+    minDurationMinutes?: number;
+    defaultSessionMinutes?: number;
+    maxGapMinutes?: number;
+  }) {
+    const res = await this.fetchWithFallback("/work-logs/commit", {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errDetails = data.details ? JSON.stringify(data.details) : "";
+      throw new Error(data.error || `Failed to log commit work (HTTP ${res.status}): ${errDetails}`);
+    }
+
+    return data;
+  }
+
   async listProjects() {
     const res = await this.fetchWithFallback("/projects", {
       method: "GET",

@@ -1,17 +1,20 @@
 {
-  "name": "tracker-mcp",
+  "name": "carpe-tracker",
   "version": "1.0.0",
   "description": "Model Context Protocol (MCP) server for Analytics System work logging",
   "main": "build/index.js",
   "type": "module",
   "bin": {
-    "tracker-mcp": "./build/index.js"
+    "carpe-tracker": "./build/index.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
     "watch": "tsc -w"
   },
+  "files": [
+    "build"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.0",
     "zod": "^3.23.8"

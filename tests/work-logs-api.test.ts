@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { resolveProject, resolveCategory } from "../src/lib/mcp/resolution";
+import { resolveProject, resolveCategory, resolveProjectByGitHubRepo } from "../src/lib/mcp/resolution";
 import { ProjectConfig, ProjectSummary } from "../src/types";
 
 describe("Work Logs MCP Resolution Logic", () => {
@@ -121,6 +121,56 @@ describe("Work Logs MCP Resolution Logic", () => {
       const empty = resolveProject("", undefined, mockConfigProjects, mockSnapshotProjects);
       expect(empty.id).toBe("proj-unassigned");
       expect(empty.name).toBe("Unassigned");
+    });
+  });
+
+  describe("resolveProjectByGitHubRepo", () => {
+    const projectsWithRepos: ProjectConfig[] = [
+      {
+        id: "proj-admin-portal",
+        name: "Admin Portal",
+        code: "ADM",
+        client: "Carpe Diem",
+        githubRepos: [
+          { owner: "Carpe25", repo: "admin-portal", defaultBranch: "main" },
+        ],
+      },
+      {
+        id: "proj-ring-configurator",
+        name: "3D Engagement Ring Configurator",
+        code: "RING",
+        client: "Carpe Diem",
+        githubRepos: [
+          { owner: "Carpe25", repo: "ring-configurator", defaultBranch: "main" },
+        ],
+      },
+    ];
+
+    it("matches exact owner and repo to project and client", () => {
+      const res = resolveProjectByGitHubRepo("Carpe25", "admin-portal", projectsWithRepos, []);
+      expect(res.id).toBe("proj-admin-portal");
+      expect(res.name).toBe("Admin Portal");
+      expect(res.client).toBe("Carpe Diem");
+    });
+
+    it("matches repo full name string like Carpe25/admin-portal", () => {
+      const res = resolveProjectByGitHubRepo("Carpe25/admin-portal.git", undefined, projectsWithRepos, []);
+      expect(res.id).toBe("proj-admin-portal");
+      expect(res.name).toBe("Admin Portal");
+      expect(res.client).toBe("Carpe Diem");
+    });
+
+    it("matches repo name even if owner differs or omitted", () => {
+      const res = resolveProjectByGitHubRepo("other-owner", "admin-portal", projectsWithRepos, []);
+      expect(res.id).toBe("proj-admin-portal");
+      expect(res.name).toBe("Admin Portal");
+      expect(res.client).toBe("Carpe Diem");
+    });
+
+    it("falls back gracefully when repo is not explicitly connected", () => {
+      const res = resolveProjectByGitHubRepo("Carpe25", "unknown-service", projectsWithRepos, []);
+      expect(res.id).toBe("proj-unknown-service");
+      expect(res.name).toBe("unknown-service");
     });
   });
 

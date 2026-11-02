@@ -10,8 +10,32 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { TrackerApiClient } from "./api-client.js";
 import { TOOLS_DEFINITIONS, handleToolCall } from "./tools.js";
+import { runSetup } from "./setup.js";
+import { handleGitHookExecution, installGitHook } from "./git-hook.js";
 
 async function main() {
+  if (process.argv.includes("setup") || process.argv.includes("--setup") || process.argv.includes("init")) {
+    await runSetup();
+    return;
+  }
+
+  if (process.argv.includes("install-hook") || process.argv.includes("install-git-hook")) {
+    const isGlobal = process.argv.includes("--global");
+    const isPrePush = process.argv.includes("--pre-push");
+    installGitHook({
+      global: isGlobal,
+      hookName: isPrePush ? "pre-push" : "post-commit",
+    });
+    return;
+  }
+
+  if (process.argv.includes("git-hook") || process.argv.includes("--git-hook")) {
+    const hookIdx = process.argv.findIndex((a) => a === "git-hook" || a === "--git-hook");
+    const hookArgs = process.argv.slice(hookIdx + 1);
+    await handleGitHookExecution(hookArgs);
+    return;
+  }
+
   const server = new Server(
     {
       name: "tracker-mcp",

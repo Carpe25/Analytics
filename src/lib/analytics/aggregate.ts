@@ -30,6 +30,7 @@ export function computeAnalytics(
     id: string;
     name: string;
     code?: string;
+    client?: string;
     totalMinutes: number;
     developerIds: Set<string>;
     logCount: number;
@@ -42,6 +43,7 @@ export function computeAnalytics(
       id: p.id,
       name: p.name,
       code: p.code,
+      client: p.client,
       totalMinutes: 0,
       developerIds: new Set<string>(),
       logCount: 0,
@@ -78,11 +80,14 @@ export function computeAnalytics(
       proj = {
         id: log.projectId,
         name: log.projectName,
+        client: log.client,
         totalMinutes: 0,
         developerIds: new Set<string>(),
         logCount: 0,
       };
       projectMap.set(log.projectId, proj);
+    } else if (!proj.client && log.client) {
+      proj.client = log.client;
     }
     proj.totalMinutes += log.durationMinutes;
     proj.developerIds.add(log.developerId);
@@ -185,7 +190,7 @@ export function computeAnalytics(
   const projects: ProjectSummary[] = Array.from(projectMap.values()).map((p) => {
     const cfg = configuredProjects.find((cp) => cp.id === p.id);
     const connectedRepos = (cfg?.githubRepos || []).map((r) => `${r.owner}/${r.repo}`);
-    const client = resolveProjectClient(p.name, cfg?.client);
+    const client = p.client || cfg?.client || resolveProjectClient(p.name, cfg?.client);
     return {
       id: p.id,
       name: p.name,

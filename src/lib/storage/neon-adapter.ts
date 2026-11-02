@@ -298,6 +298,73 @@ export class NeonArtifactStorage implements IArtifactStorage {
     }
   }
 
+  async getLastCommitForAuthor(authorName: string, authorEmail?: string): Promise<GitHubCommit | null> {
+    try {
+      const cleanName = (authorName || "").trim();
+      const cleanEmail = (authorEmail || "").trim();
+
+      const rows = await withRetry(() => this.sql`
+        SELECT raw_json FROM github_commits
+        WHERE (author_name ILIKE ${cleanName} AND ${cleanName} != '')
+           OR (author_email IS NOT NULL AND author_email ILIKE ${cleanEmail} AND ${cleanEmail} != '')
+           OR (author_login IS NOT NULL AND author_login ILIKE ${cleanName} AND ${cleanName} != '')
+        ORDER BY commit_date_utc DESC
+        LIMIT 1
+      `);
+
+      if (rows && rows.length > 0) {
+        const raw = rows[0].raw_json;
+        return typeof raw === "string" ? JSON.parse(raw) : raw;
+      }
+    } catch (err) {
+      console.warn("Could not query last commit from Neon relational table, falling back to cache:", err);
+    }
+
+    // Cache fallback
+    const commits = this.cachedSnapshot?.githubCommits || [];
+    const lowerName = (authorName || "").trim().toLowerCase();
+    const lowerEmail = (authorEmail || "").trim().toLowerCase();
+
+    const matched = commits.filter((c) => {
+      const cName = (c.authorName || "").toLowerCase();
+      const cEmail = (c.authorEmail || "").toLowerCase();
+      const cLogin = (c.authorLogin || "").toLowerCase();
+      return (
+        (lowerName && (cName === lowerName || cLogin === lowerName)) ||
+        (lowerEmail && cEmail === lowerEmail)
+      );
+    });
+
+    if (matched.length === 0) return null;
+
+    matched.sort((a, b) => new Date(b.commitDateUtc).getTime() - new Date(a.commitDateUtc).getTime());
+    return matched[0];
+  }
+
+  async insertGitHubCommit(commit: GitHubCommit): Promise<void> {
+    const id = `${commit.repoFullName}_${commit.sha}`;
+    try {
+      await withRetry(() => this.sql`
+        INSERT INTO github_commits (
+          id, project_id, repo_full_name, sha, short_sha,
+          message, author_name, author_login, author_email,
+          commit_date_utc, commit_date_local, commit_url, branch, branches, raw_json
+        ) VALUES (
+          ${id}, ${commit.projectId}, ${commit.repoFullName}, ${commit.sha}, ${commit.shortSha},
+          ${commit.message}, ${commit.authorName}, ${commit.authorLogin || null}, ${commit.authorEmail || null},
+          ${commit.commitDateUtc}, ${commit.commitDateLocal}, ${commit.commitUrl}, ${commit.branch || null},
+          ${JSON.stringify(commit.branches || [])}::jsonb, ${JSON.stringify(commit)}::jsonb
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          message = EXCLUDED.message,
+          branches = EXCLUDED.branches,
+          raw_json = EXCLUDED.raw_json;
+      `);
+    } catch (err) {
+      console.warn("Failed to insert single github commit into relational table:", err);
+    }
+  }
+
   async writeAnalyticsSnapshot(snapshot: AnalyticsSnapshot, dateKey: string): Promise<void> {
     const validated = AnalyticsSnapshotSchema.parse(snapshot);
     await withRetry(() => this.sql`

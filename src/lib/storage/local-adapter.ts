@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { IArtifactStorage, SyncLockInfo } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 export class LocalArtifactStorage implements IArtifactStorage {
@@ -61,6 +61,31 @@ export class LocalArtifactStorage implements IArtifactStorage {
   }
 
   async insertWorkLog(log: WorkLog): Promise<void> {
+    // Snapshot-based storage handles persistence in publishLatestAnalytics
+  }
+
+  async getLastCommitForAuthor(authorName: string, authorEmail?: string): Promise<GitHubCommit | null> {
+    const snapshot = await this.readLatestAnalytics();
+    const commits = snapshot?.githubCommits || [];
+    const lowerName = (authorName || "").trim().toLowerCase();
+    const lowerEmail = (authorEmail || "").trim().toLowerCase();
+
+    const matched = commits.filter((c) => {
+      const cName = (c.authorName || "").toLowerCase();
+      const cEmail = (c.authorEmail || "").toLowerCase();
+      const cLogin = (c.authorLogin || "").toLowerCase();
+      return (
+        (lowerName && (cName === lowerName || cLogin === lowerName)) ||
+        (lowerEmail && cEmail === lowerEmail)
+      );
+    });
+
+    if (matched.length === 0) return null;
+    matched.sort((a, b) => new Date(b.commitDateUtc).getTime() - new Date(a.commitDateUtc).getTime());
+    return matched[0];
+  }
+
+  async insertGitHubCommit(_commit: GitHubCommit): Promise<void> {
     // Snapshot-based storage handles persistence in publishLatestAnalytics
   }
 

@@ -64,6 +64,15 @@ function detectClientInText(text: string): { client?: string; cleanedText: strin
     cleaned = cleaned.replace(/\blumen\b/gi, "").trim();
   }
 
+  // Detect arbitrary client syntax like 'for client Acme' or 'client: Acme'
+  if (!client) {
+    const clientMatch = text.match(/\b(?:for\s+client|client[:\s]+)\s*([a-zA-Z0-9\s&]+?)(?:\s+(?:for|on|in|to)\b|$|[,\-\/])/i);
+    if (clientMatch && clientMatch[1]?.trim()) {
+      client = clientMatch[1].trim();
+      cleaned = cleaned.replace(clientMatch[0], "").trim();
+    }
+  }
+
   // Clean trailing or leading hyphens/slashes left over
   cleaned = cleaned.replace(/^[\s\-_/:]+|[\s\-_/:]+$/g, "").trim();
 
@@ -253,6 +262,73 @@ export function resolveProject(
   };
 }
 
+/**
+ * Resolves project and client from a connected GitHub repository.
+ * Matches against owner/repo in project.githubRepos, with fallback to repository name.
+ */
+export function resolveProjectByGitHubRepo(
+  repoFullNameOrOwner: string,
+  repoNameArg?: string,
+  configuredProjects: ProjectConfig[] = [],
+  snapshotProjects: ProjectSummary[] = []
+): ResolvedProject {
+  let owner = "";
+  let repo = "";
+
+  if (repoNameArg) {
+    owner = repoFullNameOrOwner.trim().toLowerCase();
+    repo = repoNameArg.trim().toLowerCase();
+  } else if (repoFullNameOrOwner.includes("/")) {
+    const parts = repoFullNameOrOwner.split("/");
+    owner = parts[0].trim().toLowerCase();
+    repo = parts.slice(1).join("/").trim().toLowerCase();
+  } else {
+    repo = repoFullNameOrOwner.trim().toLowerCase();
+  }
+
+  // Remove .git suffix if present
+  repo = repo.replace(/\.git$/i, "");
+
+  // 1. Exact match on owner and repo in project.githubRepos
+  if (owner) {
+    for (const proj of configuredProjects) {
+      if (proj.githubRepos && proj.githubRepos.length > 0) {
+        const hasRepo = proj.githubRepos.some(
+          (r) => r.owner.toLowerCase() === owner && r.repo.toLowerCase() === repo
+        );
+        if (hasRepo) {
+          const client = normalizeClientName(proj.client) || resolveProjectClient(proj.name, proj.client);
+          return {
+            id: proj.id,
+            name: proj.name,
+            client,
+            code: proj.code,
+          };
+        }
+      }
+    }
+  }
+
+  // 2. Match on repo name in project.githubRepos (in case owner differs or was omitted)
+  for (const proj of configuredProjects) {
+    if (proj.githubRepos && proj.githubRepos.length > 0) {
+      const hasRepo = proj.githubRepos.some((r) => r.repo.toLowerCase() === repo);
+      if (hasRepo) {
+        const client = normalizeClientName(proj.client) || resolveProjectClient(proj.name, proj.client);
+        return {
+          id: proj.id,
+          name: proj.name,
+          client,
+          code: proj.code,
+        };
+      }
+    }
+  }
+
+  // 3. Fallback to standard fuzzy project resolution using repo name
+  return resolveProject(repo, undefined, configuredProjects, snapshotProjects);
+}
+
 export function resolveCategory(categoryInput: string, existingCategories: { name: string }[] = []): string {
   const trimmed = (categoryInput || "").trim();
   if (!trimmed) return "Development";
@@ -282,3 +358,18 @@ export function resolveCategory(categoryInput: string, existingCategories: { nam
 
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
+
+export function inferCategoryFromCommitMessage(msg: string): string {
+  const clean = (msg || "").trim().toLowerCase();
+  if (/^(?:fix|bug|hotfix|patch)(?:\(.*\))?:/i.test(clean)) return "Bug Fix";
+  if (/^(?:feat|feature)(?:\(.*\))?:/i.test(clean)) return "Frontend";
+  if (/^(?:api|backend|db|migration|sql)(?:\(.*\))?:/i.test(clean)) return "Backend";
+  if (/^(?:ui|style|design|css)(?:\(.*\))?:/i.test(clean)) return "Design";
+  if (/^(?:devops|ci|cd|docker|infra|deploy)(?:\(.*\))?:/i.test(clean)) return "DevOps";
+  if (/^(?:test|spec|e2e|unit)(?:\(.*\))?:/i.test(clean)) return "Testing";
+  if (/^(?:doc|docs|documentation)(?:\(.*\))?:/i.test(clean)) return "Docs/Proposal";
+  if (/^(?:refactor|perf|improve)(?:\(.*\))?:/i.test(clean)) return "Improvement";
+  if (/^(?:review|cr)(?:\(.*\))?:/i.test(clean)) return "Review";
+  return "Development";
+}
+

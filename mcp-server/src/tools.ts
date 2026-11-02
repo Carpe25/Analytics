@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TrackerApiClient } from "./api-client.js";
+import { autoLogCurrentGitCommit, getGitCommitContext } from "./git-engine.js";
 
 export const LogWorkInputSchema = z.object({
   project: z.string().describe("Project name, code, or alias (e.g., 'Ring Configurator', 'CAD Portal', 'CORE', 'Medusajs'). Fuzzy matched."),
@@ -19,6 +20,17 @@ export const ListCategoriesInputSchema = z.object({});
 export const GetMyLogsInputSchema = z.object({
   developerName: z.string().optional().describe("Developer name or email. Defaults to DEVELOPER_NAME environment variable."),
   days: z.number().optional().describe("Number of past days to query (default: 1 for today)."),
+});
+
+export const LogGitCommitInputSchema = z.object({
+  cwd: z.string().optional().describe("Optional repository path (defaults to current working directory)."),
+  category: z.string().optional().describe("Optional category override (e.g. Frontend, Backend, Bug Fix). Inferred from commit message if omitted."),
+  project: z.string().optional().describe("Optional project override. Automatically resolved from connected GitHub repo if omitted."),
+  client: z.string().optional().describe("Optional client override (e.g. 'Carpe Diem')."),
+});
+
+export const GetLastCommitInfoInputSchema = z.object({
+  cwd: z.string().optional().describe("Optional repository path (defaults to current working directory)."),
 });
 
 export const TOOLS_DEFINITIONS = [
@@ -93,6 +105,44 @@ export const TOOLS_DEFINITIONS = [
         days: {
           type: "number",
           description: "Number of past days to query (default: 1 for today).",
+        },
+      },
+    },
+  },
+  {
+    name: "log_git_commit",
+    description: "Automatically logs work into the Analytics System from the latest Git commit in the repository, calculating elapsed time from the developer's last commit and matching the connected project and client.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: {
+          type: "string",
+          description: "Optional repository directory path (defaults to current working directory).",
+        },
+        category: {
+          type: "string",
+          description: "Optional category override (e.g. Frontend, Backend, Bug Fix). Inferred from commit message if omitted.",
+        },
+        project: {
+          type: "string",
+          description: "Optional project override. Automatically resolved from connected GitHub repo if omitted.",
+        },
+        client: {
+          type: "string",
+          description: "Optional client override (e.g. 'Carpe Diem').",
+        },
+      },
+    },
+  },
+  {
+    name: "get_last_commit_info",
+    description: "Inspects the latest Git commit in the repository, showing author, commit timestamp, connected project, and previous commit interval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: {
+          type: "string",
+          description: "Optional repository directory path (defaults to current working directory).",
         },
       },
     },
@@ -200,6 +250,65 @@ export async function handleToolCall(client: TrackerApiClient, name: string, arg
               ...logLines,
               "",
               `Total: ${res.totalHours} hours across ${logs.length} logged tasks.`,
+            ].join("\n"),
+          },
+        ],
+      };
+    }
+
+    case "log_git_commit": {
+      const parsed = LogGitCommitInputSchema.parse(args || {});
+      const res = await autoLogCurrentGitCommit(client, parsed);
+      const log = res.workLog;
+      return {
+        content: [
+          {
+            type: "text",
+            text: [
+              `✅ ${res.message}`,
+              "",
+              `• Work Log ID: ${log.id}`,
+              `• Commit: ${res.commit?.shortSha || "HEAD"} - "${log.description}"`,
+              `• Project: ${log.projectName} [Client: ${log.client}]`,
+              `• Category: ${log.category}`,
+              `• Duration: ${log.hours}h (${log.durationMinutes} mins) [Rule: ${res.calculation?.ruleApplied || "calculated"}]`,
+              log.taskTicketId ? `• Ticket: ${log.taskTicketId}` : null,
+              `• Developer: ${log.developerName}`,
+              "",
+              `📊 Developer Total Today: ${res.developerTotalHoursToday} hours`,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          },
+        ],
+      };
+    }
+
+    case "get_last_commit_info": {
+      const parsed = GetLastCommitInfoInputSchema.parse(args || {});
+      const ctx = getGitCommitContext(parsed.cwd);
+      if (!ctx.isGitRepo) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Current directory is not a Git repository.",
+            },
+          ],
+        };
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: [
+              `🔍 Git Commit Context:`,
+              `• Repo: ${ctx.repoFullName || "local"} (Branch: ${ctx.branch || "unknown"})`,
+              `• Latest Commit: ${ctx.shortSha || "none"}`,
+              `• Message: ${ctx.message?.split("\n")[0] || "none"}`,
+              `• Author: ${ctx.authorName || "unknown"} <${ctx.authorEmail || ""}>`,
+              `• Commit Timestamp: ${ctx.commitTimestamp ? new Date(ctx.commitTimestamp * 1000).toISOString() : "unknown"}`,
+              `• Previous Author Commit: ${ctx.previousCommitTimestamp ? new Date(ctx.previousCommitTimestamp * 1000).toISOString() : "none in local history"}`,
             ].join("\n"),
           },
         ],

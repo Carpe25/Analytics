@@ -8,13 +8,15 @@ import {
 } from "../mcp-server/src/tools";
 
 describe("MCP Server Tools and Client", () => {
-  it("exposes all 4 required MCP tools with valid schemas", () => {
+  it("exposes all 6 MCP tools with valid schemas", () => {
     const toolNames = TOOLS_DEFINITIONS.map((t) => t.name);
     expect(toolNames).toContain("log_work");
     expect(toolNames).toContain("list_projects");
     expect(toolNames).toContain("list_categories");
     expect(toolNames).toContain("get_my_logs");
-    expect(TOOLS_DEFINITIONS).toHaveLength(4);
+    expect(toolNames).toContain("log_git_commit");
+    expect(toolNames).toContain("get_last_commit_info");
+    expect(TOOLS_DEFINITIONS).toHaveLength(6);
   });
 
   it("validates LogWorkInputSchema correctly", () => {
