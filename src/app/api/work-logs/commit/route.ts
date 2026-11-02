@@ -44,12 +44,16 @@ function checkApiKey(req: NextRequest): boolean {
   return bearerToken === expectedKey || customHeader === expectedKey;
 }
 
-function getDefaultTodayDate(tz: string = "Asia/Kolkata"): string {
+function formatDateInTimezone(d: Date, tz: string = "Asia/Kolkata"): string {
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(d);
   } catch {
-    return new Date().toISOString().slice(0, 10);
+    return d.toISOString().slice(0, 10);
   }
+}
+
+function getDefaultTodayDate(tz: string = "Asia/Kolkata"): string {
+  return formatDateInTimezone(new Date(), tz);
 }
 
 function parseTimestampToMs(val: number | string | undefined): number | null {
@@ -82,9 +86,10 @@ function inferCategoryFromCommitMessage(msg: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  if (!checkApiKey(req)) {
-    return NextResponse.json({ error: "Unauthorized: Invalid or missing API key" }, { status: 401 });
-  }
+  try {
+    if (!checkApiKey(req)) {
+      return NextResponse.json({ error: "Unauthorized: Invalid or missing API key" }, { status: 401 });
+    }
 
   let body: unknown;
   try {
@@ -229,13 +234,9 @@ export async function POST(req: NextRequest) {
   let workDate: string;
   if (data.commitDate) {
     const normalized = normalizeDate(data.commitDate);
-    workDate = normalized || getDefaultTodayDate(env.appTimezone);
+    workDate = normalized || formatDateInTimezone(new Date(currMs), env.appTimezone);
   } else {
-    try {
-      workDate = formatDateTimeInTimezone(new Date(currMs).toISOString(), env.appTimezone).slice(0, 10);
-    } catch {
-      workDate = getDefaultTodayDate(env.appTimezone);
-    }
+    workDate = formatDateInTimezone(new Date(currMs), env.appTimezone);
   }
 
   const shortSha = data.shortSha || data.commitSha.slice(0, 7);
@@ -354,4 +355,8 @@ export async function POST(req: NextRequest) {
     },
     developerTotalHoursToday,
   });
+  } catch (err: any) {
+    console.error("[/api/work-logs/commit] Error:", err);
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+  }
 }

@@ -5,7 +5,7 @@ export interface TrackerConfig {
 }
 
 export function getTrackerConfig(): TrackerConfig {
-  let apiUrl = process.env.TRACKER_API_URL?.trim() || "http://localhost:3000/api";
+  let apiUrl = process.env.TRACKER_API_URL?.trim() || "https://analytics-two-ashen.vercel.app/api";
   apiUrl = apiUrl.replace(/\/+$/, "");
   if (!apiUrl.endsWith("/api")) {
     apiUrl = `${apiUrl}/api`;
