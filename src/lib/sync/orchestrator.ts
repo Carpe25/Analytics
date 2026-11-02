@@ -7,6 +7,7 @@ import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { getAppEnv } from "@/lib/config/env";
 import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
 import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog } from "@/types";
+import { generateWorkLogsFromGitHubCommits } from "./git-worklog-sync";
 
 export interface SyncExecutionResult {
   run: SyncRun;
@@ -123,7 +124,9 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
         mcpLogs = await storage.getMcpWorkLogs();
       } else {
         const prevSnapshot = await storage.readLatestAnalytics();
-        mcpLogs = (prevSnapshot?.workLogs || []).filter((l) => l.sourceTab === "MCP");
+        mcpLogs = (prevSnapshot?.workLogs || []).filter(
+          (l) => l.sourceTab === "MCP" || l.sourceTab === "GIT"
+        );
       }
     } catch (mcpErr) {
       console.warn("Could not retrieve MCP logs for merging during sync:", mcpErr);
@@ -137,7 +140,30 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
     for (const l of mcpLogs) {
       combinedLogMap.set(l.id, l);
     }
-    const allWorkLogs = Array.from(combinedLogMap.values());
+    const baseWorkLogs = Array.from(combinedLogMap.values());
+
+    // Step 7c: Generate work logs from unlogged GitHub commits since developer's last log date
+    const gitWorkLogResult = generateWorkLogsFromGitHubCommits(
+      githubResult.commits,
+      baseWorkLogs,
+      settings.projects,
+      settings.developerGithubMapping,
+      { timezone: env.appTimezone }
+    );
+
+    // Persist newly generated commit work logs to relational database if supported
+    if (gitWorkLogResult.newLogs.length > 0 && storage.insertWorkLog) {
+      for (const nl of gitWorkLogResult.newLogs) {
+        try {
+          await storage.insertWorkLog(nl);
+        } catch (dbErr) {
+          console.warn("Could not insert git work log to database:", dbErr);
+        }
+      }
+    }
+
+    const allWorkLogs = gitWorkLogResult.allWorkLogs;
+    syncRun.rowsAccepted += gitWorkLogResult.createdCount;
 
     // Step 8: Calculate Aggregates
     const aggResult = computeAnalytics(

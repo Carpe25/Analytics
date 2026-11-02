@@ -287,14 +287,14 @@ export class NeonArtifactStorage implements IArtifactStorage {
   async getMcpWorkLogs(): Promise<WorkLog[]> {
     try {
       const rows = await withRetry(() => this.sql`
-        SELECT raw_json FROM work_logs WHERE source_tab = 'MCP'
+        SELECT raw_json FROM work_logs WHERE source_tab IN ('MCP', 'GIT')
       `);
       return rows.map((r: any) =>
         typeof r.raw_json === "string" ? JSON.parse(r.raw_json) : r.raw_json
       );
     } catch (err) {
-      console.warn("Could not query MCP logs from Neon relational table:", err);
-      return (this.cachedSnapshot?.workLogs || []).filter((l) => l.sourceTab === "MCP");
+      console.warn("Could not query MCP/GIT logs from Neon relational table:", err);
+      return (this.cachedSnapshot?.workLogs || []).filter((l) => l.sourceTab === "MCP" || l.sourceTab === "GIT");
     }
   }
 

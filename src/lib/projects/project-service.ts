@@ -3,6 +3,7 @@ import { ProjectConfig, GitHubRepoConfig, AnalyticsSnapshot, WorkLog, GitHubComm
 import { DEFAULT_INTEGRATION_SETTINGS, resolveProjectClient } from "@/lib/config/defaults";
 import { fetchAllProjectCommits } from "@/lib/github/commits";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
+import { generateWorkLogsFromGitHubCommits } from "@/lib/sync/git-worklog-sync";
 
 export interface UnifiedProject {
   id: string;
@@ -167,9 +168,29 @@ export class ProjectService {
           (a, b) => new Date(b.commitDateUtc).getTime() - new Date(a.commitDateUtc).getTime()
         );
 
+        // Generate work logs from commits since developer's latest work log date
+        const gitWorkLogResult = generateWorkLogsFromGitHubCommits(
+          mergedCommits,
+          snapshot.workLogs || [],
+          settings.projects,
+          settings.developerGithubMapping
+        );
+
+        if (gitWorkLogResult.newLogs.length > 0 && this.storage.insertWorkLog) {
+          for (const nl of gitWorkLogResult.newLogs) {
+            try {
+              await this.storage.insertWorkLog(nl);
+            } catch (dbErr) {
+              console.warn("Could not insert git work log to database:", dbErr);
+            }
+          }
+        }
+
+        const allWorkLogs = gitWorkLogResult.allWorkLogs;
+
         // Recompute analytics
         const aggResult = computeAnalytics(
-          snapshot.workLogs || [],
+          allWorkLogs,
           mergedCommits,
           settings.projects,
           settings.developerGithubMapping
@@ -181,6 +202,7 @@ export class ProjectService {
           projects: aggResult.projects,
           developers: aggResult.developers,
           categories: aggResult.categories,
+          workLogs: allWorkLogs,
           githubCommits: mergedCommits,
           githubRepositories: aggResult.githubRepositories,
         };

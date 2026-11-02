@@ -293,9 +293,11 @@ export function resolveProjectByGitHubRepo(
   if (owner) {
     for (const proj of configuredProjects) {
       if (proj.githubRepos && proj.githubRepos.length > 0) {
-        const hasRepo = proj.githubRepos.some(
-          (r) => r.owner.toLowerCase() === owner && r.repo.toLowerCase() === repo
-        );
+        const hasRepo = proj.githubRepos.some((r) => {
+          const rOwner = (r.owner || "").toLowerCase();
+          const rRepo = (r.repo || (r as any).name || "").toLowerCase();
+          return rOwner === owner && rRepo === repo;
+        });
         if (hasRepo) {
           const client = normalizeClientName(proj.client) || resolveProjectClient(proj.name, proj.client);
           return {
@@ -312,7 +314,10 @@ export function resolveProjectByGitHubRepo(
   // 2. Match on repo name in project.githubRepos (in case owner differs or was omitted)
   for (const proj of configuredProjects) {
     if (proj.githubRepos && proj.githubRepos.length > 0) {
-      const hasRepo = proj.githubRepos.some((r) => r.repo.toLowerCase() === repo);
+      const hasRepo = proj.githubRepos.some((r) => {
+        const rRepo = (r.repo || (r as any).name || "").toLowerCase();
+        return rRepo === repo;
+      });
       if (hasRepo) {
         const client = normalizeClientName(proj.client) || resolveProjectClient(proj.name, proj.client);
         return {
