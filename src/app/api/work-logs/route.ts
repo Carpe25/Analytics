@@ -7,6 +7,7 @@ import { normalizeDate } from "@/lib/normalization/work-logs";
 import { resolveProjectClient, DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
 import { AnalyticsSnapshot, WorkLog } from "@/types";
 import { resolveProject, resolveCategory } from "@/lib/mcp/resolution";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 
 const WorkLogInputSchema = z.object({
   developerName: z.string().optional(),
@@ -246,10 +247,15 @@ export async function GET(req: NextRequest) {
 
   // Developer filter
   if (developerId) {
-    filtered = filtered.filter((l) => l.developerId.toLowerCase() === developerId);
+    const targetCanon = resolveCanonicalDeveloper(developerId).id;
+    filtered = filtered.filter(
+      (l) => resolveCanonicalDeveloper(l.developerId || l.developerName).id === targetCanon
+    );
   } else if (developerName) {
+    const targetCanon = resolveCanonicalDeveloper(developerName).id;
     filtered = filtered.filter(
       (l) =>
+        resolveCanonicalDeveloper(l.developerId || l.developerName).id === targetCanon ||
         l.developerName.toLowerCase().includes(developerName) ||
         l.developerId.toLowerCase().includes(developerName)
     );

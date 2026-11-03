@@ -26,14 +26,7 @@ export async function GET(req: NextRequest) {
 
   const hasFilter = (month && month !== "all") || !!startDate || !!endDate;
 
-  if (!hasFilter) {
-    return NextResponse.json({
-      developers: snapshot.developers,
-      availableMonths,
-    });
-  }
-
-  // Filter logs by date range or month
+  // Filter logs by date range or month if specified
   let filteredLogs = [...snapshot.workLogs];
   if (startDate) {
     filteredLogs = filteredLogs.filter((l) => l.date >= startDate);
@@ -49,10 +42,22 @@ export async function GET(req: NextRequest) {
 
   const agg = computeAnalytics(
     filteredLogs,
-    [],
+    snapshot.githubCommits || [],
     settings.projects,
     settings.developerGithubMapping
   );
+
+  // If viewing all records and database snapshot has unmerged duplicates, heal snapshot asynchronously
+  if (!hasFilter && snapshot.developers.length !== agg.developers.length) {
+    storage.publishLatestAnalytics({
+      ...snapshot,
+      developers: agg.developers,
+      summary: {
+        ...snapshot.summary,
+        developerCount: agg.developers.length,
+      },
+    }).catch((err) => console.warn("Could not heal unmerged developers in snapshot:", err));
+  }
 
   return NextResponse.json({
     developers: agg.developers,

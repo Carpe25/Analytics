@@ -8,6 +8,7 @@ import {
   ProjectConfig,
 } from "@/types";
 import { resolveProjectClient } from "@/lib/config/defaults";
+import { resolveCanonicalDeveloper } from "./canonical-developer";
 
 export interface AggregationResult {
   summary: AnalyticsSnapshot["summary"];
@@ -74,6 +75,11 @@ export function computeAnalytics(
   for (const log of workLogs) {
     totalMinutes += log.durationMinutes;
 
+    const { id: devId, name: devName } = resolveCanonicalDeveloper(
+      log.developerId || log.developerName,
+      developerGithubMapping
+    );
+
     // Project aggregate
     let proj = projectMap.get(log.projectId);
     if (!proj) {
@@ -90,26 +96,26 @@ export function computeAnalytics(
       proj.client = log.client;
     }
     proj.totalMinutes += log.durationMinutes;
-    proj.developerIds.add(log.developerId);
+    proj.developerIds.add(devId);
     proj.logCount += 1;
     if (!proj.latestLogDate || log.date > proj.latestLogDate) {
       proj.latestLogDate = log.date;
     }
 
     // Developer aggregate
-    let dev = developerMap.get(log.developerId);
+    let dev = developerMap.get(devId);
     if (!dev) {
-      const mappedGh = developerGithubMapping[log.developerId] || [];
+      const mappedGh = developerGithubMapping[devId] || [];
       dev = {
-        id: log.developerId,
-        name: log.developerName,
+        id: devId,
+        name: devName,
         sourceTabs: new Set<string>(),
         githubUsernames: new Set<string>(mappedGh),
         totalMinutes: 0,
         projects: new Set<string>(),
         categoryTotals: {},
       };
-      developerMap.set(log.developerId, dev);
+      developerMap.set(devId, dev);
     }
     dev.totalMinutes += log.durationMinutes;
     dev.sourceTabs.add(log.sourceTab);
@@ -131,7 +137,7 @@ export function computeAnalytics(
       categoryMap.set(log.category, cat);
     }
     cat.totalMinutes += log.durationMinutes;
-    cat.developers.add(log.developerId);
+    cat.developers.add(devId);
     cat.projects.add(log.projectName);
   }
 
@@ -158,16 +164,24 @@ export function computeAnalytics(
       latestCommitDateByProject.set(commit.projectId, commit.commitDateLocal);
     }
 
-    // Match commit author to developer
-    for (const [devId, dev] of Array.from(developerMap.entries())) {
-      const logins = Array.from<string>(dev.githubUsernames).map((u: string) => u.toLowerCase());
-      const authorLogin = (commit.authorLogin || "").toLowerCase();
-      const authorName = (commit.authorName || "").toLowerCase();
-      if (
-        (authorLogin && logins.includes(authorLogin)) ||
-        (authorName && authorName === dev.name.toLowerCase())
-      ) {
-        commitCountsByDeveloper.set(devId, (commitCountsByDeveloper.get(devId) || 0) + 1);
+    // Match commit author to canonical developer
+    const { id: commitDevId } = resolveCanonicalDeveloper(
+      commit.authorLogin || commit.authorName,
+      developerGithubMapping
+    );
+    if (developerMap.has(commitDevId)) {
+      commitCountsByDeveloper.set(commitDevId, (commitCountsByDeveloper.get(commitDevId) || 0) + 1);
+    } else {
+      for (const [devId, dev] of Array.from(developerMap.entries())) {
+        const logins = Array.from<string>(dev.githubUsernames).map((u: string) => u.toLowerCase());
+        const authorLogin = (commit.authorLogin || "").toLowerCase();
+        const authorName = (commit.authorName || "").toLowerCase();
+        if (
+          (authorLogin && logins.includes(authorLogin)) ||
+          (authorName && authorName === dev.name.toLowerCase())
+        ) {
+          commitCountsByDeveloper.set(devId, (commitCountsByDeveloper.get(devId) || 0) + 1);
+        }
       }
     }
 
@@ -207,19 +221,21 @@ export function computeAnalytics(
   });
 
   // Format DeveloperSummaries
-  const developers: DeveloperSummary[] = Array.from(developerMap.values()).map((d) => ({
-    id: d.id,
-    name: d.name,
-    sourceTabs: Array.from(d.sourceTabs),
-    githubUsernames: Array.from(d.githubUsernames),
-    totalMinutes: d.totalMinutes,
-    totalHours: Number((d.totalMinutes / 60).toFixed(1)),
-    projectCount: d.projects.size,
-    projects: Array.from(d.projects),
-    categoryTotals: d.categoryTotals,
-    latestLogDate: d.latestLogDate,
-    commitCount: commitCountsByDeveloper.get(d.id) || 0,
-  }));
+  const developers: DeveloperSummary[] = Array.from(developerMap.values())
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      sourceTabs: Array.from(d.sourceTabs),
+      githubUsernames: Array.from(d.githubUsernames),
+      totalMinutes: d.totalMinutes,
+      totalHours: Number((d.totalMinutes / 60).toFixed(1)),
+      projectCount: d.projects.size,
+      projects: Array.from(d.projects),
+      categoryTotals: d.categoryTotals,
+      latestLogDate: d.latestLogDate,
+      commitCount: commitCountsByDeveloper.get(d.id) || 0,
+    }))
+    .sort((a, b) => b.totalMinutes - a.totalMinutes);
 
   // Format CategorySummaries
   const categories: CategorySummary[] = Array.from(categoryMap.values()).map((c) => ({

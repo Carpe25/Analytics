@@ -60,9 +60,15 @@ export const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
     },
   ],
   developerGithubMapping: {
-    "dev-jay": ["jaydev", "jay-eng"],
-    "dev-alex": ["alex-codes"],
-    "dev-sam": ["sam-builder"],
+    "dev-jay": ["jay", "jaytcdj-dev", "jaydev", "jay-eng", "jay patel", "jaypatel"],
+    "dev-kaif": ["kaif", "khankaif", "kaif khan", "kaif-khan", "khan kaif"],
+    "dev-mahesh": ["mahesh", "maheshthakur9152", "mahesh thakur", "mahesh-thakur", "maheshthakur"],
+    "dev-amol": ["amol", "amol yadav", "amolyadav", "amol-yadav"],
+    "dev-jemish": ["jemish", "jemish sakariya", "jemish-sakariya", "jemish-vision", "jemishvision"],
+    "dev-ashfaq-hussain": ["ashfaq", "ashfaq hussain", "ashfaq-hussain"],
+    "dev-paulkumar-nadar": ["paulkumar", "paulkumar nadar", "paulkumar-nadar"],
+    "dev-zaid-khan": ["zaid", "zaid khan", "zaid-khan"],
+    "dev-vikas-rathod": ["vikas", "vikas rathod", "vikas-rathod"],
   },
 };
 

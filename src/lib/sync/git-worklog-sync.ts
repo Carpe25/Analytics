@@ -1,5 +1,6 @@
 import { GitHubCommit, ProjectConfig, WorkLog } from "@/types";
 import { inferCategoryFromCommitMessage, resolveProjectByGitHubRepo } from "@/lib/mcp/resolution";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 
 function formatDateInTimezone(d: Date, tz: string = "Asia/Kolkata"): string {
   try {
@@ -53,31 +54,16 @@ export function generateWorkLogsFromGitHubCommits(
     loggedSignatures.add(sig);
   }
 
-  // 2. Map GitHub username/authorName to developer identity
-  // Build reverse lookup: githubLogin/name -> developerId
-  const githubUserToDevId = new Map<string, string>();
-  for (const [devId, handles] of Object.entries(developerGithubMapping)) {
-    for (const h of handles) {
-      githubUserToDevId.set(h.toLowerCase(), devId);
-    }
-  }
-
-  // 3. Group commits by developer
+  // 2. Group commits by canonical developer
   const commitsByDev = new Map<string, { devId: string; devName: string; commits: GitHubCommit[] }>();
 
   for (const commit of commits) {
-    let devId: string | undefined;
-    let devName = commit.authorName || "Developer";
-
-    if (commit.authorLogin && githubUserToDevId.has(commit.authorLogin.toLowerCase())) {
-      devId = githubUserToDevId.get(commit.authorLogin.toLowerCase());
-    } else if (commit.authorName && githubUserToDevId.has(commit.authorName.toLowerCase())) {
-      devId = githubUserToDevId.get(commit.authorName.toLowerCase());
-    }
-
-    if (!devId) {
-      devId = `dev-${devName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
-    }
+    const canonical = resolveCanonicalDeveloper(
+      commit.authorLogin || commit.authorName,
+      developerGithubMapping
+    );
+    const devId = canonical.id;
+    const devName = canonical.name;
 
     const key = devId;
     if (!commitsByDev.has(key)) {
@@ -88,14 +74,15 @@ export function generateWorkLogsFromGitHubCommits(
 
   const newLogs: WorkLog[] = [];
 
-  // 4. Process each developer's commits
+  // 3. Process each developer's commits
   for (const [, devGroup] of commitsByDev.entries()) {
     const { devId, devName, commits: devCommits } = devGroup;
 
     // Find developer's latest work log date
-    const devLogs = existingWorkLogs.filter(
-      (l) => l.developerId === devId || l.developerName.toLowerCase() === devName.toLowerCase()
-    );
+    const devLogs = existingWorkLogs.filter((l) => {
+      const canon = resolveCanonicalDeveloper(l.developerId || l.developerName, developerGithubMapping);
+      return canon.id === devId;
+    });
 
     let latestLogDate: string | undefined;
     if (devLogs.length > 0) {

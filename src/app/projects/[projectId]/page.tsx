@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [logSortOrder, setLogSortOrder] = useState<"desc" | "asc">("desc");
 
   const loadProjectDetails = useCallback(() => {
     setLoading(true);
@@ -94,6 +95,13 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
 
   const { project, workLogs, commits, developerBreakdown, categoryBreakdown, devCategoryMatrix } = data;
   const categoriesList = categoryBreakdown.map((c) => c.category);
+
+  const sortedWorkLogs = useMemo(() => {
+    return [...(workLogs || [])].sort((a, b) => {
+      const cmp = b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
+      return logSortOrder === "desc" ? cmp : -cmp;
+    });
+  }, [workLogs, logSortOrder]);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -254,7 +262,18 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
               <Table>
                 <TableHeader>
                   <TableRow className="border-b border-[#17212B]/15">
-                    <TableHead className="w-24 text-xs font-semibold text-[#17212B]">Date</TableHead>
+                    <TableHead
+                      className="w-28 text-xs font-semibold text-[#17212B] cursor-pointer hover:text-blue-600 transition-colors select-none"
+                      onClick={() => setLogSortOrder(logSortOrder === "desc" ? "asc" : "desc")}
+                      title="Click to toggle sorting"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Date</span>
+                        <span className="text-[10px] font-mono text-[#17212B]/60">
+                          {logSortOrder === "desc" ? "▼ Latest" : "▲ Oldest"}
+                        </span>
+                      </div>
+                    </TableHead>
                     <TableHead className="w-36 text-xs font-semibold text-[#17212B]">Developer</TableHead>
                     <TableHead className="w-28 text-xs font-semibold text-[#17212B]">Category</TableHead>
                     <TableHead className="text-xs font-semibold text-[#17212B]">Description</TableHead>
@@ -263,7 +282,7 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workLogs.map((log) => (
+                  {sortedWorkLogs.map((log) => (
                     <TableRow key={log.id} className="border-b border-[#17212B]/10 hover:bg-[#17212B]/5">
                       <TableCell className="font-mono text-xs whitespace-nowrap py-2.5">{log.date}</TableCell>
                       <TableCell className="text-xs font-medium py-2.5">{log.developerName}</TableCell>

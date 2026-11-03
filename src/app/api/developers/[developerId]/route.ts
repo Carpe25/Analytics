@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
+import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
 
 export async function GET(
   req: NextRequest,
@@ -18,13 +20,14 @@ export async function GET(
     return NextResponse.json({ error: "No analytics snapshot available" }, { status: 404 });
   }
 
-  const developer = snapshot.developers.find((d) => d.id === developerId);
-  if (!developer) {
-    return NextResponse.json({ error: "Developer not found" }, { status: 404 });
-  }
+  const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
+  const canonicalTarget = resolveCanonicalDeveloper(developerId, settings.developerGithubMapping);
 
-  // Derive unique available months for this developer
-  const allDevLogs = snapshot.workLogs.filter((l) => l.developerId === developerId);
+  // Derive unique available months for this developer across all matching aliases
+  const allDevLogs = snapshot.workLogs.filter(
+    (l) => resolveCanonicalDeveloper(l.developerId || l.developerName, settings.developerGithubMapping).id === canonicalTarget.id
+  );
+
   const monthSet = new Set<string>();
   for (const l of allDevLogs) {
     if (l.date && l.date.length >= 7) {
@@ -34,7 +37,7 @@ export async function GET(
   const availableMonths = Array.from(monthSet).sort().reverse();
 
   // Filter logs by date range or month if specified
-  let developerLogs = allDevLogs;
+  let developerLogs = [...allDevLogs];
   if (startDate) {
     developerLogs = developerLogs.filter((l) => l.date >= startDate);
   }
@@ -44,6 +47,24 @@ export async function GET(
   if (month && month !== "all" && !startDate && !endDate) {
     developerLogs = developerLogs.filter((l) => l.date.startsWith(month));
   }
+
+  // Sort logs latest first (date descending, id descending)
+  developerLogs.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+
+  const developer = snapshot.developers.find(
+    (d) => resolveCanonicalDeveloper(d.id, settings.developerGithubMapping).id === canonicalTarget.id
+  ) || {
+    id: canonicalTarget.id,
+    name: canonicalTarget.name,
+    sourceTabs: [],
+    githubUsernames: [],
+    totalMinutes: 0,
+    totalHours: 0,
+    projectCount: 0,
+    projects: [],
+    categoryTotals: {},
+    commitCount: 0,
+  };
 
   const totalMinutes = developerLogs.reduce((sum, l) => sum + l.durationMinutes, 0);
   const totalHours = Number((totalMinutes / 60).toFixed(1));

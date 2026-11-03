@@ -161,7 +161,10 @@ export default function OverviewPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {snapshot.workLogs.slice(0, 7).map((log) => (
+                      {[...snapshot.workLogs]
+                        .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
+                        .slice(0, 7)
+                        .map((log) => (
                         <TableRow key={log.id} className="border-b border-[#17212B]/10">
                           <TableCell className="font-mono text-xs py-2 whitespace-nowrap">{log.date}</TableCell>
                           <TableCell className="text-xs font-semibold py-2">{log.developerName}</TableCell>

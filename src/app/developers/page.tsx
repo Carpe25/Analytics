@@ -501,7 +501,9 @@ export default function DevelopersPage() {
                                           </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                          {detail.workLogs.map((log) => (
+                                          {[...(detail.workLogs || [])]
+                                            .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
+                                            .map((log) => (
                                             <TableRow key={log.id} className="border-b border-[#17212B]/10">
                                               <TableCell className="font-mono text-xs py-2 whitespace-nowrap">{log.date}</TableCell>
                                               <TableCell className="text-xs font-medium py-2">{log.projectName}</TableCell>

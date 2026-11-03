@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { resolveProjectClient } from "@/lib/config/defaults";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 
 export async function GET(
   req: NextRequest,
@@ -20,10 +21,22 @@ export async function GET(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const projectLogs = snapshot.workLogs.filter((l) => l.projectId === projectId);
+  // Canonicalize and sort logs latest-first (date descending)
+  const projectLogs = snapshot.workLogs
+    .filter((l) => l.projectId === projectId)
+    .map((log) => {
+      const canon = resolveCanonicalDeveloper(log.developerId || log.developerName, settings?.developerGithubMapping);
+      return {
+        ...log,
+        developerId: canon.id,
+        developerName: canon.name,
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+
   const projectCommits = snapshot.githubCommits.filter((c) => c.projectId === projectId);
 
-  // Developer breakdown
+  // Developer breakdown with canonical identities
   const devMinutes: Record<string, { id: string; name: string; minutes: number; count: number }> = {};
   for (const log of projectLogs) {
     if (!devMinutes[log.developerId]) {
