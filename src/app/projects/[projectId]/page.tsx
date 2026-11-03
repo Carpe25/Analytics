@@ -72,6 +72,14 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
     }
   };
 
+  const sortedWorkLogs = useMemo(() => {
+    if (!data?.workLogs) return [];
+    return [...data.workLogs].sort((a, b) => {
+      const cmp = b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
+      return logSortOrder === "desc" ? cmp : -cmp;
+    });
+  }, [data?.workLogs, logSortOrder]);
+
   if (loading && !data) {
     return (
       <div className="flex-1 p-12 text-center text-xs text-[#17212B]/60">
@@ -95,13 +103,6 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
 
   const { project, workLogs, commits, developerBreakdown, categoryBreakdown, devCategoryMatrix } = data;
   const categoriesList = categoryBreakdown.map((c) => c.category);
-
-  const sortedWorkLogs = useMemo(() => {
-    return [...(workLogs || [])].sort((a, b) => {
-      const cmp = b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
-      return logSortOrder === "desc" ? cmp : -cmp;
-    });
-  }, [workLogs, logSortOrder]);
 
   return (
     <div className="flex-1 flex flex-col">
