@@ -1,5 +1,6 @@
 import { WorkLog, ProjectConfig } from "@/types";
 import { parseDurationToMinutes } from "./duration";
+import { canonicalClient, isSameClient, buildProjectId } from "@/lib/config/defaults";
 
 export interface RawSheetRowContext {
   spreadsheetId: string;
@@ -116,11 +117,12 @@ export function findColumnIndex(headers: string[], targetName: string): number {
 }
 
 /**
- * Normalizes project name using configured projects and their aliases.
+ * Normalizes project name using configured projects and their aliases, scoped by client.
  */
 export function matchProject(
   rawProject: string,
-  projects: ProjectConfig[]
+  projects: ProjectConfig[],
+  rawClient?: string
 ): { projectId: string; projectName: string } {
   const trimmed = (rawProject || "").trim();
   if (!trimmed) {
@@ -128,21 +130,41 @@ export function matchProject(
   }
 
   const lower = trimmed.toLowerCase();
+  const normalizedClient = rawClient?.trim();
 
+  // 1. First priority: match configured project with both project name/code/alias AND client
+  if (normalizedClient) {
+    for (const proj of projects) {
+      const nameMatches =
+        proj.id.toLowerCase() === lower ||
+        proj.name.toLowerCase() === lower ||
+        (proj.code && proj.code.toLowerCase() === lower) ||
+        (proj.aliases && proj.aliases.some((a) => a.toLowerCase() === lower));
+
+      if (nameMatches && isSameClient(proj.client, normalizedClient)) {
+        return { projectId: proj.id, projectName: proj.name };
+      }
+    }
+  }
+
+  // 2. Second priority: match configured project where client is not explicitly set or matches
   for (const proj of projects) {
-    if (proj.id.toLowerCase() === lower || proj.name.toLowerCase() === lower) {
-      return { projectId: proj.id, projectName: proj.name };
-    }
-    if (proj.code && proj.code.toLowerCase() === lower) {
-      return { projectId: proj.id, projectName: proj.name };
-    }
-    if (proj.aliases && proj.aliases.some((a) => a.toLowerCase() === lower)) {
+    const nameMatches =
+      proj.id.toLowerCase() === lower ||
+      proj.name.toLowerCase() === lower ||
+      (proj.code && proj.code.toLowerCase() === lower) ||
+      (proj.aliases && proj.aliases.some((a) => a.toLowerCase() === lower));
+
+    if (nameMatches) {
+      if (normalizedClient && proj.client && !isSameClient(proj.client, normalizedClient)) {
+        continue;
+      }
       return { projectId: proj.id, projectName: proj.name };
     }
   }
 
-  // Generate fallback ID
-  const fallbackId = `proj-${trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+  // 3. Fallback: generate client-scoped project ID
+  const fallbackId = buildProjectId(trimmed, normalizedClient);
   return { projectId: fallbackId, projectName: trimmed };
 }
 
@@ -228,16 +250,11 @@ export function normalizeSheetRows(
       continue;
     }
 
-    const rawProject = projCol >= 0 ? String(rowValues[projCol] || "").trim() : "";
-    const { projectId, projectName } = matchProject(rawProject, projects);
-
     let client = clientCol >= 0 && rowValues[clientCol] ? String(rowValues[clientCol]).trim() : "";
-    if (client.toLowerCase() === "oromond") {
-      client = "Oramond";
-    }
-    if (!client) {
-      client = "Unassigned";
-    }
+    client = canonicalClient(client);
+
+    const rawProject = projCol >= 0 ? String(rowValues[projCol] || "").trim() : "";
+    const { projectId, projectName } = matchProject(rawProject, projects, client);
 
     const category = catCol >= 0 && rowValues[catCol] && String(rowValues[catCol]).trim()
       ? String(rowValues[catCol]).trim()

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
-import { DEFAULT_INTEGRATION_SETTINGS, resolveProjectClient } from "@/lib/config/defaults";
+import { DEFAULT_INTEGRATION_SETTINGS, resolveProjectClient, canonicalClient, isSameClient } from "@/lib/config/defaults";
 import { WorkLog, ProjectConfig, ProjectSummary } from "@/types";
 
 function computeClientBreakdown(
@@ -35,9 +35,7 @@ function computeClientBreakdown(
   > = {};
 
   for (const l of logs) {
-    let client = (l.client || "").trim();
-    if (client.toLowerCase() === "oromond") client = "Oramond";
-    if (!client) client = "Unassigned";
+    let client = canonicalClient(l.client);
 
     if (!clientGroups[client]) {
       clientGroups[client] = {
@@ -54,9 +52,22 @@ function computeClientBreakdown(
     grp.logCount += 1;
 
     if (!grp.projectsMap[l.projectId]) {
-      const cfg = projectsConfig.find((p) => p.id === l.projectId);
-      const snapProj = snapshotProjects.find((p) => p.id === l.projectId);
+      // Find configured project strictly matching this client and project ID/name
+      const cfg =
+        projectsConfig.find((p) => (p.id === l.projectId || (p.aliases && p.aliases.includes(l.projectId))) && isSameClient(p.client, client)) ||
+        projectsConfig.find(
+          (p) =>
+            p.name.toLowerCase() === l.projectName.toLowerCase() &&
+            isSameClient(p.client, client)
+        ) ||
+        projectsConfig.find((p) => (p.id === l.projectId || (p.aliases && p.aliases.includes(l.projectId))) && !p.client);
+
+      const snapProj = snapshotProjects.find(
+        (p) => (p.id === l.projectId || p.id === cfg?.id) && isSameClient(p.client, client)
+      ) || snapshotProjects.find((p) => p.id === l.projectId && isSameClient(p.client, client));
+
       const connectedRepos = (cfg?.githubRepos || []).map((r) => `${r.owner}/${r.repo}`);
+
       grp.projectsMap[l.projectId] = {
         id: l.projectId,
         name: l.projectName,
@@ -65,7 +76,7 @@ function computeClientBreakdown(
         totalMinutes: 0,
         developerIds: new Set(),
         logCount: 0,
-        connectedRepos: connectedRepos.length > 0 ? connectedRepos : (snapProj?.connectedRepos || []),
+        connectedRepos: connectedRepos.length > 0 ? connectedRepos : (snapProj && isSameClient(snapProj.client, client) ? snapProj.connectedRepos || [] : []),
         categoriesMap: {},
         latestLogDate: l.date,
       };
@@ -80,6 +91,37 @@ function computeClientBreakdown(
     }
     if (!pEntry.latestLogDate || l.date > pEntry.latestLogDate) {
       pEntry.latestLogDate = l.date;
+    }
+  }
+
+  // Also include configured projects for each client so they are discoverable even before first sync
+  for (const p of projectsConfig) {
+    const client = canonicalClient(p.client);
+    if (!clientGroups[client]) {
+      clientGroups[client] = {
+        clientName: client,
+        totalMinutes: 0,
+        developerIds: new Set(),
+        logCount: 0,
+        projectsMap: {},
+      };
+    }
+    const grp = clientGroups[client];
+    if (!grp.projectsMap[p.id]) {
+      const snapProj = snapshotProjects.find((sp) => sp.id === p.id);
+      const connectedRepos = (p.githubRepos || []).map((r) => `${r.owner}/${r.repo}`);
+      grp.projectsMap[p.id] = {
+        id: p.id,
+        name: p.name,
+        code: p.code || snapProj?.code,
+        client,
+        totalMinutes: 0,
+        developerIds: new Set(),
+        logCount: 0,
+        connectedRepos,
+        categoriesMap: {},
+        latestLogDate: snapProj?.latestLogDate,
+      };
     }
   }
 

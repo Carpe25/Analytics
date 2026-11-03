@@ -16,14 +16,30 @@ export async function GET(
     return NextResponse.json({ error: "No analytics snapshot available" }, { status: 404 });
   }
 
-  const project = snapshot.projects.find((p) => p.id === projectId);
+  const config = settings?.projects.find((p) => p.id === projectId || (p.aliases && p.aliases.includes(projectId)));
+  let project = snapshot.projects.find((p) => p.id === projectId || p.id === config?.id);
+
+  if (!project && config) {
+    project = {
+      id: config.id,
+      name: config.name,
+      code: config.code,
+      client: config.client,
+      totalMinutes: 0,
+      totalHours: 0,
+      developerCount: 0,
+      logCount: 0,
+      connectedRepos: (config.githubRepos || []).map((r) => `${r.owner}/${r.repo}`),
+    };
+  }
+
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
   // Canonicalize and sort logs latest-first (date descending)
   const projectLogs = snapshot.workLogs
-    .filter((l) => l.projectId === projectId)
+    .filter((l) => l.projectId === projectId || l.projectId === config?.id)
     .map((log) => {
       const canon = resolveCanonicalDeveloper(log.developerId || log.developerName, settings?.developerGithubMapping);
       return {
@@ -34,7 +50,9 @@ export async function GET(
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 
-  const projectCommits = snapshot.githubCommits.filter((c) => c.projectId === projectId);
+  const projectCommits = (snapshot.githubCommits || []).filter(
+    (c) => c.projectId === projectId || c.projectId === config?.id
+  );
 
   // Developer breakdown with canonical identities
   const devMinutes: Record<string, { id: string; name: string; minutes: number; count: number }> = {};
@@ -71,13 +89,15 @@ export async function GET(
       (devCategoryMatrix[log.developerName][log.category] || 0) + log.durationMinutes;
   }
 
-  // Config mapping info
-  const config = settings?.projects.find((p) => p.id === projectId);
+  // Return project details with canonical data
 
   return NextResponse.json({
     project: {
       ...project,
       client: project.client || config?.client || resolveProjectClient(project.name, config?.client),
+      connectedRepos: (config?.githubRepos && config.githubRepos.length > 0)
+        ? config.githubRepos.map((r) => `${r.owner}/${r.repo}`)
+        : (project.connectedRepos || []),
     },
     config,
     workLogs: projectLogs,

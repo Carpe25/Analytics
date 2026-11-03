@@ -73,12 +73,53 @@ export const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
 };
 
 /**
+ * Resolves canonical client name consistently across sheets, settings, and MCP.
+ */
+export function canonicalClient(rawClient?: unknown): string {
+  if (typeof rawClient !== "string" || !rawClient.trim()) return "Unassigned";
+  const lower = rawClient.trim().toLowerCase();
+
+  if (lower === "oromond" || lower === "oramond") return "Oramond";
+  if (/\b(?:univ(?:\s*diam)?|universal(?:\s*diamonds?)?|ud)\b/i.test(lower)) return "Univ Diam";
+  if (/\b(?:carpe(?:\s*di[ae]m)?|carpedi[ae]m|cd)\b/i.test(lower)) return "Carpe Diem";
+  if (/\b(?:effision|plm)\b/i.test(lower)) return "Effision";
+  if (/\b(?:level\s*up)\b/i.test(lower)) return "Level Up";
+  if (/\b(?:lumen)\b/i.test(lower)) return "Lumen";
+  if (/\b(?:cast(?:\s*and\s*|\s*&\s*)creed)\b/i.test(lower)) return "Cast and Creed";
+  if (/\b(?:internal|operations?|ops)\b/i.test(lower)) return "Internal / Operations";
+
+  return rawClient.trim();
+}
+
+/**
+ * Checks if two client representations refer to the same client.
+ */
+export function isSameClient(clientA?: unknown, clientB?: unknown): boolean {
+  if (!clientA && !clientB) return true;
+  if (!clientA || !clientB) return false;
+  return canonicalClient(clientA).toLowerCase() === canonicalClient(clientB).toLowerCase();
+}
+
+/**
+ * Builds a deterministic, client-scoped project identifier.
+ */
+export function buildProjectId(projectName: string, client?: string): string {
+  const pSlug = (projectName || "unassigned").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const canon = client ? canonicalClient(client) : "";
+  const cSlug = canon && canon !== "Unassigned" ? canon.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "";
+  if (!cSlug || pSlug.startsWith(cSlug)) {
+    return `proj-${pSlug}`;
+  }
+  return `proj-${cSlug}-${pSlug}`;
+}
+
+/**
  * Resolves the client name for a project.
  * Uses explicitly configured client if present, otherwise maps based on known project names/codes.
  */
 export function resolveProjectClient(projectNameOrId: string, configuredClient?: string): string {
   if (configuredClient && configuredClient.trim()) {
-    return configuredClient.trim();
+    return canonicalClient(configuredClient);
   }
   const str = (projectNameOrId || "").toLowerCase();
   if (/cad[- _]?portal|medusa|shopify/i.test(str)) {
@@ -87,8 +128,8 @@ export function resolveProjectClient(projectNameOrId: string, configuredClient?:
   if (/effision|plm/i.test(str)) {
     return "Effision";
   }
-  if (/custom[- _]?portal|jewelry|ud/i.test(str)) {
-    return "Universal Diamonds";
+  if (/jewelry|ud/i.test(str)) {
+    return "Univ Diam";
   }
   if (/level[- _]?up/i.test(str)) {
     return "Level Up";

@@ -170,4 +170,34 @@ describe("ProjectService Domain Isolation", () => {
     expect(cad?.githubRepos.length).toBe(1);
     expect(cad?.githubRepos[0].repo).toBe("cad-portal");
   });
+
+  it("keeps repositories isolated when two different clients have identically named projects", async () => {
+    // Connect repo for Univ Diam Custom Portal
+    await service.connectRepository("proj-univ-diam-custom-portal", {
+      owner: "UnivDiam",
+      repo: "frontend",
+      defaultBranch: "main",
+    });
+
+    // Connect repo for Carpe Diem Custom Portal
+    await service.connectRepository("proj-carpe-diem-custom-portal", {
+      owner: "Carpe25",
+      repo: "custom-cd",
+      defaultBranch: "main",
+    });
+
+    const settings = await storage.readIntegrationSettings();
+    const univProj = settings?.projects.find((p) => p.id === "proj-univ-diam-custom-portal");
+    const carpeProj = settings?.projects.find((p) => p.id === "proj-carpe-diem-custom-portal");
+
+    expect(univProj).toBeDefined();
+    expect(carpeProj).toBeDefined();
+
+    expect(univProj?.githubRepos).toEqual([
+      { owner: "UnivDiam", repo: "frontend", defaultBranch: "main" },
+    ]);
+    expect(carpeProj?.githubRepos).toEqual([
+      { owner: "Carpe25", repo: "custom-cd", defaultBranch: "main" },
+    ]);
+  });
 });
