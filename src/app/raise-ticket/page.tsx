@@ -26,6 +26,63 @@ interface ProjectOption {
   clientId?: string;
 }
 
+// Compress image client-side before upload to prevent HTTP 413 Payload Too Large on Nginx/Vercel
+async function compressImage(file: File, maxWidth = 1920, quality = 0.82): Promise<File> {
+  if (!file.type.startsWith("image/") || file.size < 400 * 1024) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.src = objectUrl;
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+
+      if (width > maxWidth || height > maxWidth) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxWidth) / height);
+          height = maxWidth;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(file);
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob || blob.size >= file.size) {
+            return resolve(file);
+          }
+          const compressedFile = new File(
+            [blob],
+            file.name.replace(/\.[^.]+$/, ".webp"),
+            { type: "image/webp", lastModified: Date.now() }
+          );
+          resolve(compressedFile);
+        },
+        "image/webp",
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+  });
+}
+
 export default function RaiseTicketPage() {
   const [clients, setClients] = useState<string[]>([]);
   const [allProjects, setAllProjects] = useState<ProjectOption[]>([]);
@@ -105,8 +162,11 @@ export default function RaiseTicketPage() {
 
   // Upload image directly through server-side endpoint (zero CORS issues)
   const uploadImage = async (file: File): Promise<string> => {
+    // Compress image client-side to ensure it stays well under proxy/Nginx/Vercel size limits (avoids 413)
+    const fileToUpload = await compressImage(file);
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", fileToUpload);
 
     const res = await fetch("/api/tickets/upload", {
       method: "POST",
@@ -114,6 +174,11 @@ export default function RaiseTicketPage() {
     });
 
     if (!res.ok) {
+      if (res.status === 413) {
+        throw new Error(
+          "The screenshot file is too large for the web server (HTTP 413). Please try a smaller image or screenshot."
+        );
+      }
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || "Failed to upload photo to storage");
     }
