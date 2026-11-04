@@ -125,7 +125,7 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
       } else {
         const prevSnapshot = await storage.readLatestAnalytics();
         mcpLogs = (prevSnapshot?.workLogs || []).filter(
-          (l) => l.sourceTab === "MCP" || l.sourceTab === "GIT"
+          (l) => l.sourceTab === "MCP"
         );
       }
     } catch (mcpErr) {

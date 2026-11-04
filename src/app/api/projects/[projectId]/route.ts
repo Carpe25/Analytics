@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
-import { resolveProjectClient } from "@/lib/config/defaults";
+import { resolveProjectClient, canonicalClient, isSameClient } from "@/lib/config/defaults";
 import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 
 export async function GET(
@@ -37,9 +37,57 @@ export async function GET(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
+  const targetClient = project.client || config?.client;
+
+  const connectedRepoSet = new Set(
+    (config?.githubRepos || []).map((r) => `${r.owner}/${r.repo}`.toLowerCase())
+  );
+  if (project.connectedRepos) {
+    for (const r of project.connectedRepos) {
+      connectedRepoSet.add(r.toLowerCase());
+    }
+  }
+
+  // Filter commits strictly to this project's ID or connected repositories
+  const projectCommits = (snapshot.githubCommits || []).filter((c) => {
+    if (connectedRepoSet.size > 0 && connectedRepoSet.has(c.repoFullName.toLowerCase())) {
+      return true;
+    }
+    return c.projectId === projectId || (config && c.projectId === config.id);
+  });
+
+  const projectCommitShas = new Set(
+    projectCommits.map((c) => c.shortSha?.toLowerCase() || c.sha.slice(0, 7).toLowerCase())
+  );
+  const projectCommitFullShas = new Set(projectCommits.map((c) => c.sha.toLowerCase()));
+
   // Canonicalize and sort logs latest-first (date descending)
+  // Ensure GIT work logs are strictly verified against this project's commits
   const projectLogs = snapshot.workLogs
-    .filter((l) => l.projectId === projectId || l.projectId === config?.id)
+    .filter((log) => {
+      // 1. Client must match if project has a client
+      if (targetClient && log.client && !isSameClient(log.client, targetClient)) {
+        return false;
+      }
+
+      // 2. If it is a GIT work log, it MUST originate from this project's commits!
+      if (log.sourceTab === "GIT") {
+        const parts = log.id.split("-");
+        const logSha = parts[parts.length - 1]?.toLowerCase();
+        if (logSha) {
+          if (!projectCommitShas.has(logSha) && !projectCommitFullShas.has(logSha)) {
+            return false;
+          }
+        }
+      }
+
+      // 3. Project ID or name must match
+      const projIdMatches = log.projectId === projectId || (config && log.projectId === config.id);
+      const projNameMatches =
+        log.projectName && project.name && log.projectName.toLowerCase() === project.name.toLowerCase();
+
+      return projIdMatches || (projNameMatches && targetClient && isSameClient(log.client, targetClient));
+    })
     .map((log) => {
       const canon = resolveCanonicalDeveloper(log.developerId || log.developerName, settings?.developerGithubMapping);
       return {
@@ -49,10 +97,6 @@ export async function GET(
       };
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-
-  const projectCommits = (snapshot.githubCommits || []).filter(
-    (c) => c.projectId === projectId || c.projectId === config?.id
-  );
 
   // Developer breakdown with canonical identities
   const devMinutes: Record<string, { id: string; name: string; minutes: number; count: number }> = {};

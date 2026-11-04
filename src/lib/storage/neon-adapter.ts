@@ -40,37 +40,6 @@ export class NeonArtifactStorage implements IArtifactStorage {
       throw new Error("DATABASE_URL is not configured for NeonArtifactStorage");
     }
     this.sql = neon(this.databaseUrl);
-
-    // Pre-seed cache from local fallback if available to avoid cold-start delays
-    this.seedFromLocalFiles();
-  }
-
-  private seedFromLocalFiles(): void {
-    try {
-      const localSnapshotPath = path.resolve(process.cwd(), ".artifacts", "analytics", "latest.json");
-      if (fs.existsSync(localSnapshotPath)) {
-        const raw = fs.readFileSync(localSnapshotPath, "utf8");
-        const parsed = JSON.parse(raw);
-        const validated = AnalyticsSnapshotSchema.safeParse(parsed);
-        if (validated.success) {
-          this.cachedSnapshot = validated.data as AnalyticsSnapshot;
-          this.snapshotCachedAt = Date.now();
-        }
-      }
-    } catch {}
-
-    try {
-      const localSettingsPath = path.resolve(process.cwd(), ".artifacts", "config", "settings.json");
-      if (fs.existsSync(localSettingsPath)) {
-        const raw = fs.readFileSync(localSettingsPath, "utf8");
-        const parsed = JSON.parse(raw);
-        const validated = IntegrationSettingsSchema.safeParse(parsed);
-        if (validated.success) {
-          this.cachedSettings = validated.data as IntegrationSettings;
-          this.settingsCachedAt = Date.now();
-        }
-      }
-    } catch {}
   }
 
   async init(): Promise<void> {
@@ -90,11 +59,11 @@ export class NeonArtifactStorage implements IArtifactStorage {
 
   private async fetchSnapshotFromNeon(): Promise<AnalyticsSnapshot | null> {
     try {
-      const rows = await this.sql`
+      const rows = await withRetry(() => this.sql`
         SELECT snapshot_json FROM analytics_snapshots
         WHERE id = 'latest'
         LIMIT 1;
-      `;
+      `);
 
       if (!rows || rows.length === 0) {
         return null;
@@ -140,6 +109,13 @@ export class NeonArtifactStorage implements IArtifactStorage {
     // Immediately update memory cache
     this.cachedSnapshot = validated as AnalyticsSnapshot;
     this.snapshotCachedAt = Date.now();
+
+    // Also sync to local disk file so local copy is never stale
+    try {
+      const localSnapshotPath = path.resolve(process.cwd(), ".artifacts", "analytics", "latest.json");
+      fs.mkdirSync(path.dirname(localSnapshotPath), { recursive: true });
+      fs.writeFileSync(localSnapshotPath, JSON.stringify(validated, null, 2), "utf8");
+    } catch {}
 
     // Persist snapshot JSON to Neon with retry
     await withRetry(() => this.sql`
@@ -287,14 +263,14 @@ export class NeonArtifactStorage implements IArtifactStorage {
   async getMcpWorkLogs(): Promise<WorkLog[]> {
     try {
       const rows = await withRetry(() => this.sql`
-        SELECT raw_json FROM work_logs WHERE source_tab IN ('MCP', 'GIT')
+        SELECT raw_json FROM work_logs WHERE source_tab = 'MCP'
       `);
       return rows.map((r: any) =>
         typeof r.raw_json === "string" ? JSON.parse(r.raw_json) : r.raw_json
       );
     } catch (err) {
-      console.warn("Could not query MCP/GIT logs from Neon relational table:", err);
-      return (this.cachedSnapshot?.workLogs || []).filter((l) => l.sourceTab === "MCP" || l.sourceTab === "GIT");
+      console.warn("Could not query MCP logs from Neon relational table:", err);
+      return (this.cachedSnapshot?.workLogs || []).filter((l) => l.sourceTab === "MCP");
     }
   }
 
@@ -479,11 +455,11 @@ export class NeonArtifactStorage implements IArtifactStorage {
 
   private async fetchSettingsFromNeon(): Promise<IntegrationSettings | null> {
     try {
-      const rows = await this.sql`
+      const rows = await withRetry(() => this.sql`
         SELECT settings_json FROM integration_settings
         WHERE id = 'default'
         LIMIT 1;
-      `;
+      `);
 
       if (!rows || rows.length === 0) {
         return null;
@@ -524,6 +500,13 @@ export class NeonArtifactStorage implements IArtifactStorage {
     const validated = IntegrationSettingsSchema.parse(settings);
     this.cachedSettings = validated as IntegrationSettings;
     this.settingsCachedAt = Date.now();
+
+    // Also sync to local disk file
+    try {
+      const localSettingsPath = path.resolve(process.cwd(), ".artifacts", "config", "settings.json");
+      fs.mkdirSync(path.dirname(localSettingsPath), { recursive: true });
+      fs.writeFileSync(localSettingsPath, JSON.stringify(validated, null, 2), "utf8");
+    } catch {}
 
     await withRetry(() => this.sql`
       INSERT INTO integration_settings (id, settings_json, updated_at)
