@@ -80,7 +80,7 @@ export default function OverviewPage() {
     <div className="flex-1 flex flex-col pb-16">
       <Header
         title="Time & Activity Analytics"
-        description="Synchronized developer work logs from Google Sheets and connected GitHub commits"
+        description="Developer work logs from connected GitHub commits and direct MCP submissions"
         onSyncComplete={loadData}
       />
 

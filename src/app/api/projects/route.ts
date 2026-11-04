@@ -3,157 +3,7 @@ import { getArtifactStorage } from "@/lib/storage/provider";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { DEFAULT_INTEGRATION_SETTINGS, resolveProjectClient, canonicalClient, isSameClient } from "@/lib/config/defaults";
 import { WorkLog, ProjectConfig, ProjectSummary } from "@/types";
-
-function computeClientBreakdown(
-  logs: WorkLog[],
-  projectsConfig: ProjectConfig[],
-  snapshotProjects: ProjectSummary[] = []
-) {
-  const clientGroups: Record<
-    string,
-    {
-      clientName: string;
-      totalMinutes: number;
-      developerIds: Set<string>;
-      logCount: number;
-      projectsMap: Record<
-        string,
-        {
-          id: string;
-          name: string;
-          code?: string;
-          client: string;
-          totalMinutes: number;
-          developerIds: Set<string>;
-          logCount: number;
-          connectedRepos: string[];
-          categoriesMap: Record<string, number>;
-          latestLogDate?: string;
-        }
-      >;
-    }
-  > = {};
-
-  for (const l of logs) {
-    let client = canonicalClient(l.client);
-
-    if (!clientGroups[client]) {
-      clientGroups[client] = {
-        clientName: client,
-        totalMinutes: 0,
-        developerIds: new Set(),
-        logCount: 0,
-        projectsMap: {},
-      };
-    }
-    const grp = clientGroups[client];
-    grp.totalMinutes += l.durationMinutes;
-    grp.developerIds.add(l.developerId);
-    grp.logCount += 1;
-
-    if (!grp.projectsMap[l.projectId]) {
-      // Find configured project strictly matching this client and project ID/name
-      const cfg =
-        projectsConfig.find((p) => (p.id === l.projectId || (p.aliases && p.aliases.includes(l.projectId))) && isSameClient(p.client, client)) ||
-        projectsConfig.find(
-          (p) =>
-            p.name.toLowerCase() === l.projectName.toLowerCase() &&
-            isSameClient(p.client, client)
-        ) ||
-        projectsConfig.find((p) => (p.id === l.projectId || (p.aliases && p.aliases.includes(l.projectId))) && !p.client);
-
-      const snapProj = snapshotProjects.find(
-        (p) => (p.id === l.projectId || p.id === cfg?.id) && isSameClient(p.client, client)
-      ) || snapshotProjects.find((p) => p.id === l.projectId && isSameClient(p.client, client));
-
-      const connectedRepos = (cfg?.githubRepos || []).map((r) => `${r.owner}/${r.repo}`);
-
-      grp.projectsMap[l.projectId] = {
-        id: l.projectId,
-        name: l.projectName,
-        code: cfg?.code || snapProj?.code,
-        client,
-        totalMinutes: 0,
-        developerIds: new Set(),
-        logCount: 0,
-        connectedRepos: connectedRepos.length > 0 ? connectedRepos : (snapProj && isSameClient(snapProj.client, client) ? snapProj.connectedRepos || [] : []),
-        categoriesMap: {},
-        latestLogDate: l.date,
-      };
-    }
-
-    const pEntry = grp.projectsMap[l.projectId];
-    pEntry.totalMinutes += l.durationMinutes;
-    pEntry.developerIds.add(l.developerId);
-    pEntry.logCount += 1;
-    if (l.category) {
-      pEntry.categoriesMap[l.category] = (pEntry.categoriesMap[l.category] || 0) + l.durationMinutes;
-    }
-    if (!pEntry.latestLogDate || l.date > pEntry.latestLogDate) {
-      pEntry.latestLogDate = l.date;
-    }
-  }
-
-  // Also include configured projects for each client so they are discoverable even before first sync
-  for (const p of projectsConfig) {
-    const client = canonicalClient(p.client);
-    if (!clientGroups[client]) {
-      clientGroups[client] = {
-        clientName: client,
-        totalMinutes: 0,
-        developerIds: new Set(),
-        logCount: 0,
-        projectsMap: {},
-      };
-    }
-    const grp = clientGroups[client];
-    if (!grp.projectsMap[p.id]) {
-      const snapProj = snapshotProjects.find((sp) => sp.id === p.id);
-      const connectedRepos = (p.githubRepos || []).map((r) => `${r.owner}/${r.repo}`);
-      grp.projectsMap[p.id] = {
-        id: p.id,
-        name: p.name,
-        code: p.code || snapProj?.code,
-        client,
-        totalMinutes: 0,
-        developerIds: new Set(),
-        logCount: 0,
-        connectedRepos,
-        categoriesMap: {},
-        latestLogDate: snapProj?.latestLogDate,
-      };
-    }
-  }
-
-  return Object.values(clientGroups)
-    .map((c) => {
-      const projects = Object.values(c.projectsMap)
-        .map((p) => ({
-          id: p.id,
-          name: p.name,
-          code: p.code,
-          client: p.client,
-          totalMinutes: p.totalMinutes,
-          totalHours: Number((p.totalMinutes / 60).toFixed(1)),
-          developerCount: p.developerIds.size,
-          logCount: p.logCount,
-          connectedRepos: p.connectedRepos,
-          categories: Object.keys(p.categoriesMap).sort((a, b) => p.categoriesMap[b] - p.categoriesMap[a]),
-          latestLogDate: p.latestLogDate,
-        }))
-        .sort((a, b) => b.totalHours - a.totalHours);
-
-      return {
-        clientName: c.clientName,
-        totalMinutes: c.totalMinutes,
-        totalHours: Number((c.totalMinutes / 60).toFixed(1)),
-        developerCount: c.developerIds.size,
-        logCount: c.logCount,
-        projects,
-      };
-    })
-    .sort((a, b) => b.totalHours - a.totalHours);
-}
+import { computeClientBreakdown } from "@/lib/projects/client-breakdown";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -241,4 +91,130 @@ export async function GET(req: NextRequest) {
     availableCategories,
     month,
   });
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const name = (body.name || "").trim();
+    const code = (body.code || "").trim().toUpperCase();
+    let clientName = (body.client || "").trim();
+    const clientId = (body.clientId || "").trim();
+    const aliasesInput = body.aliases;
+
+    if (!name) {
+      return NextResponse.json({ error: "Project name is required" }, { status: 400 });
+    }
+
+    const storage = getArtifactStorage();
+    const [clients, settingsData, snapshot] = await Promise.all([
+      storage.readClients(),
+      storage.readIntegrationSettings(),
+      storage.readLatestAnalytics(),
+    ]);
+
+    const settings = settingsData || DEFAULT_INTEGRATION_SETTINGS;
+
+    // Resolve client
+    let resolvedClientId = clientId;
+    if (resolvedClientId) {
+      const match = clients.find((c) => c.id === resolvedClientId);
+      if (match) {
+        clientName = match.name;
+      }
+    } else if (clientName) {
+      const match = clients.find((c) => c.name.toLowerCase() === clientName.toLowerCase());
+      if (match) {
+        resolvedClientId = match.id;
+        clientName = match.name;
+      } else {
+        // Auto-create client so it exists in clients table
+        const slug = clientName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+        resolvedClientId = `client-${slug || Date.now()}`;
+        await storage.saveClient({
+          id: resolvedClientId,
+          name: clientName,
+          code: code || undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+    } else {
+      clientName = "General";
+    }
+
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const projectId = `proj-${slug || Date.now()}`;
+
+    // Check if project exists
+    const existingIndex = settings.projects.findIndex(
+      (p) => p.id === projectId || p.name.toLowerCase() === name.toLowerCase()
+    );
+
+    let aliases: string[] = [name];
+    if (Array.isArray(aliasesInput)) {
+      aliases = Array.from(new Set([name, ...aliasesInput.map((a: any) => String(a).trim()).filter(Boolean)]));
+    }
+
+    const newProject = {
+      id: projectId,
+      name,
+      code: code || undefined,
+      client: clientName,
+      clientId: resolvedClientId || undefined,
+      aliases,
+      githubRepos: [],
+    };
+
+    if (existingIndex >= 0) {
+      settings.projects[existingIndex] = {
+        ...settings.projects[existingIndex],
+        ...newProject,
+      };
+    } else {
+      settings.projects.push(newProject);
+    }
+
+    await storage.writeIntegrationSettings(settings);
+
+    // If snapshot exists, update or add to snapshot
+    if (snapshot) {
+      const existingSnapIndex = snapshot.projects.findIndex((p) => p.id === projectId);
+      const snapProject = {
+        id: projectId,
+        name,
+        code: code || undefined,
+        client: clientName,
+        totalMinutes: 0,
+        totalHours: 0,
+        developerCount: 0,
+        logCount: 0,
+        connectedRepos: [],
+      };
+
+      if (existingSnapIndex >= 0) {
+        snapshot.projects[existingSnapIndex] = {
+          ...snapshot.projects[existingSnapIndex],
+          name,
+          client: clientName,
+          code: code || snapshot.projects[existingSnapIndex].code,
+        };
+      } else {
+        snapshot.projects.push(snapProject);
+      }
+
+      await storage.publishLatestAnalytics(snapshot).catch(() => {});
+    }
+
+    return NextResponse.json({
+      success: true,
+      project: newProject,
+    });
+  } catch (err: any) {
+    console.error("Failed to create project:", err);
+    return NextResponse.json({ error: err.message || "Failed to create project" }, { status: 500 });
+  }
 }

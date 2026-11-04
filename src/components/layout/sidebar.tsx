@@ -14,12 +14,15 @@ import {
   Clock,
   ShieldCheck,
   ChevronRight,
+  Ticket,
+  LogOut,
 } from "lucide-react";
 import { cn, formatDateTimeInTimezone } from "@/lib/utils";
 import { useSyncStatus } from "@/lib/events/sync-bus";
 
 const NAV_ITEMS = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
+  { label: "Tickets", href: "/tickets", icon: Ticket },
   { label: "Projects", href: "/projects", icon: FolderGit2 },
   { label: "Developers", href: "/developers", icon: Users },
   { label: "Categories", href: "/categories", icon: Tag },
@@ -99,6 +102,17 @@ export function Sidebar() {
             <span>{syncStatus.status || "Checking..."}</span>
           </div>
         </div>
+
+        <button
+          onClick={async () => {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+          }}
+          className="w-full mt-3 pt-2.5 border-t border-[#17212B]/10 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#17212B]/70 hover:text-red-600 transition-colors"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          <span>Sign Out</span>
+        </button>
       </div>
     </aside>
   );

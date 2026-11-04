@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { neon, NeonQueryFunction } from "@neondatabase/serverless";
 import { IArtifactStorage } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelayMs = 300): Promise<T> {
@@ -52,8 +52,18 @@ export class NeonArtifactStorage implements IArtifactStorage {
           expires_at TIMESTAMPTZ NOT NULL
         );
       `;
+      await this.sql`
+        CREATE TABLE IF NOT EXISTS clients (
+          id VARCHAR(64) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL UNIQUE,
+          code VARCHAR(32),
+          description TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `;
     } catch (err) {
-      console.warn("Could not ensure sync_locks table exists:", err);
+      console.warn("Could not ensure tables exist in Neon:", err);
     }
   }
 
@@ -514,6 +524,96 @@ export class NeonArtifactStorage implements IArtifactStorage {
       ON CONFLICT (id) DO UPDATE SET
         settings_json = EXCLUDED.settings_json,
         updated_at = NOW();
+    `);
+  }
+
+  async readClients(): Promise<Client[]> {
+    try {
+      await this.init();
+      const rows = await withRetry(() => this.sql`
+        SELECT id, name, code, description, created_at, updated_at
+        FROM clients
+        ORDER BY name ASC;
+      `);
+
+      if (rows && rows.length > 0) {
+        return rows.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          code: r.code || undefined,
+          description: r.description || undefined,
+          createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+          updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
+        }));
+      }
+
+      // Auto-seed clients if table is currently empty
+      const settings = await this.readIntegrationSettings();
+      const clientMap = new Map<string, Client>();
+
+      const defaultSeeds = [
+        { name: "Carpe Diem", code: "CD" },
+        { name: "Effision", code: "EFF" },
+        { name: "Univ Diam", code: "UD" },
+        { name: "Level Up", code: "LU" },
+        { name: "Lumen", code: "LUM" },
+        { name: "Internal / Operations", code: "INT" },
+      ];
+
+      for (const d of defaultSeeds) {
+        const id = `client-${d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+        clientMap.set(d.name.toLowerCase(), { id, name: d.name, code: d.code });
+      }
+
+      if (settings?.projects) {
+        for (const p of settings.projects) {
+          if (p.client && p.client.trim()) {
+            const raw = p.client.trim();
+            if (!clientMap.has(raw.toLowerCase())) {
+              const id = `client-${raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+              clientMap.set(raw.toLowerCase(), { id, name: raw, code: p.code });
+            }
+          }
+        }
+      }
+
+      const seedList = Array.from(clientMap.values());
+      for (const c of seedList) {
+        await this.saveClient(c).catch(() => {});
+      }
+
+      return seedList.sort((a, b) => a.name.localeCompare(b.name));
+    } catch (err) {
+      console.error("Error reading clients from Neon:", err);
+      return [];
+    }
+  }
+
+  async saveClient(client: Client): Promise<void> {
+    await this.init();
+    const id = client.id || `client-${client.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+    await withRetry(() => this.sql`
+      INSERT INTO clients (id, name, code, description, created_at, updated_at)
+      VALUES (
+        ${id},
+        ${client.name.trim()},
+        ${client.code?.trim() || null},
+        ${client.description?.trim() || null},
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        code = EXCLUDED.code,
+        description = EXCLUDED.description,
+        updated_at = NOW();
+    `);
+  }
+
+  async deleteClient(id: string): Promise<void> {
+    await this.init();
+    await withRetry(() => this.sql`
+      DELETE FROM clients WHERE id = ${id};
     `);
   }
 }

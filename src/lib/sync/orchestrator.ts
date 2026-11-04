@@ -1,7 +1,5 @@
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { acquireLock, releaseLock } from "./lock";
-import { readAllGoogleSheetSources } from "@/lib/google-sheets/read-sources";
-import { normalizeSheetRows } from "@/lib/normalization/work-logs";
 import { fetchAllProjectCommits } from "@/lib/github/commits";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { getAppEnv } from "@/lib/config/env";
@@ -27,7 +25,7 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
     triggerType,
     startedAt,
     status: "running",
-    sourcesAttempted: [],
+    sourcesAttempted: ["GitHub Commits", "MCP Logs"],
     rowsRead: 0,
     rowsAccepted: 0,
     rowsUpdated: 0,
@@ -60,54 +58,7 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
 
     const env = getAppEnv();
 
-    // Step 4: Read Google Sheets
-    const sheetResult = await readAllGoogleSheetSources(settings.googleSheets);
-    syncRun.sourcesAttempted = sheetResult.sourcesAttempted;
-    syncRun.rowsRead = sheetResult.rows.length;
-    if (sheetResult.errors.length > 0) {
-      syncRun.errors.push(...sheetResult.errors);
-    }
-    if (sheetResult.warnings.length > 0) {
-      syncRun.warnings.push(...sheetResult.warnings);
-    }
-
-    // Step 5 & 6: Normalize work logs
-    const normResult = normalizeSheetRows(
-      sheetResult.rows,
-      settings.googleSheets.columnMapping,
-      settings.projects
-    );
-
-    syncRun.rowsAccepted = normResult.acceptedLogs.length;
-    syncRun.rowsIgnored = normResult.ignoredCount;
-    syncRun.rowsRejected = normResult.rejectedLogs.length;
-    syncRun.details = {
-      sampleRejections: normResult.rejectedLogs.slice(0, 10).map((r) => ({
-        tab: r.tabName,
-        row: r.rowIndex,
-        reason: r.reason,
-        values: r.rawValues?.slice(0, 7),
-      })),
-    };
-    if (normResult.warnings.length > 0) {
-      syncRun.warnings.push(...normResult.warnings);
-    }
-
-    // Check if we have source errors that prevent a valid update
-    if (sheetResult.errors.length > 0 && normResult.acceptedLogs.length === 0) {
-      // If reading failed completely, do NOT overwrite the prior snapshot
-      syncRun.status = "failed";
-      syncRun.finishedAt = new Date().toISOString();
-      syncRun.durationMs = Date.now() - startTime;
-      await storage.appendSyncHistory(syncRun);
-      await releaseLock(runId);
-      return {
-        run: syncRun,
-        error: `Sync failed while reading Google Sheets: ${sheetResult.errors.join("; ")}`,
-      };
-    }
-
-    // Step 7: Fetch GitHub commits
+    // Step 4: Fetch GitHub commits across all connected repositories
     const githubResult = await fetchAllProjectCommits(settings.projects);
     syncRun.commitsFetched = githubResult.commits.length;
     if (githubResult.errors.length > 0) {
@@ -117,35 +68,30 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
       syncRun.warnings.push(...githubResult.warnings);
     }
 
-    // Step 7b: Preserve MCP and system-logged work logs
-    let mcpLogs: WorkLog[] = [];
-    try {
-      if (storage.getMcpWorkLogs) {
-        mcpLogs = await storage.getMcpWorkLogs();
-      } else {
-        const prevSnapshot = await storage.readLatestAnalytics();
-        mcpLogs = (prevSnapshot?.workLogs || []).filter(
-          (l) => l.sourceTab === "MCP"
-        );
+    // Step 5: Retrieve existing work logs (preserving MCP and historical logs)
+    let existingLogs: WorkLog[] = [];
+    const prevSnapshot = await storage.readLatestAnalytics();
+    if (prevSnapshot?.workLogs) {
+      existingLogs = [...prevSnapshot.workLogs];
+    }
+
+    if (storage.getMcpWorkLogs) {
+      try {
+        const mcpLogs = await storage.getMcpWorkLogs();
+        const existingMap = new Map<string, WorkLog>(existingLogs.map((l) => [l.id, l]));
+        for (const ml of mcpLogs) {
+          existingMap.set(ml.id, ml);
+        }
+        existingLogs = Array.from(existingMap.values());
+      } catch (mcpErr) {
+        console.warn("Could not retrieve MCP logs for merging during sync:", mcpErr);
       }
-    } catch (mcpErr) {
-      console.warn("Could not retrieve MCP logs for merging during sync:", mcpErr);
     }
 
-    // Merge Google Sheets logs and MCP logs (preserving uniqueness by log id)
-    const combinedLogMap = new Map<string, WorkLog>();
-    for (const l of normResult.acceptedLogs) {
-      combinedLogMap.set(l.id, l);
-    }
-    for (const l of mcpLogs) {
-      combinedLogMap.set(l.id, l);
-    }
-    const baseWorkLogs = Array.from(combinedLogMap.values());
-
-    // Step 7c: Generate work logs from unlogged GitHub commits since developer's last log date
+    // Step 6: Generate work logs from unlogged GitHub commits
     const gitWorkLogResult = generateWorkLogsFromGitHubCommits(
       githubResult.commits,
-      baseWorkLogs,
+      existingLogs,
       settings.projects,
       settings.developerGithubMapping,
       { timezone: env.appTimezone }
@@ -163,9 +109,10 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
     }
 
     const allWorkLogs = gitWorkLogResult.allWorkLogs;
-    syncRun.rowsAccepted += gitWorkLogResult.createdCount;
+    syncRun.rowsRead = allWorkLogs.length;
+    syncRun.rowsAccepted = allWorkLogs.length;
 
-    // Step 8: Calculate Aggregates
+    // Step 7: Calculate Aggregates
     const aggResult = computeAnalytics(
       allWorkLogs,
       githubResult.commits,
@@ -173,14 +120,14 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
       settings.developerGithubMapping
     );
 
-    // Step 9: Assemble snapshot
-    const sourceStatus = sheetResult.errors.length > 0 ? "error" : "connected";
+    // Step 8: Assemble snapshot
+    const sourceStatus = githubResult.errors.length > 0 ? "partial" : "connected";
 
     const newSnapshot: AnalyticsSnapshot = {
       schemaVersion: "1.0.0",
       generatedAtUtc: new Date().toISOString(),
       displayTimezone: env.appTimezone,
-      sourceStatus,
+      sourceStatus: sourceStatus === "partial" ? "error" : "connected",
       lastSuccessfulSyncAtUtc: new Date().toISOString(),
       summary: aggResult.summary,
       projects: aggResult.projects,
@@ -192,7 +139,7 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
       warnings: syncRun.warnings,
     };
 
-    // Step 10 & 11: Write daily snapshot if enabled, and publish latest
+    // Step 9: Write daily snapshot if enabled, and publish latest
     if (env.enableDailySnapshots) {
       const todayKey = new Date().toISOString().slice(0, 10);
       await storage.writeAnalyticsSnapshot(newSnapshot, todayKey);
@@ -201,13 +148,13 @@ export async function runSync(triggerType: "scheduled" | "manual"): Promise<Sync
     // Atomically publish latest analytics
     await storage.publishLatestAnalytics(newSnapshot);
 
-    // Step 12: Record success
-    syncRun.status = sheetResult.errors.length > 0 || githubResult.errors.length > 0 ? "partial" : "success";
+    // Step 10: Record success
+    syncRun.status = githubResult.errors.length > 0 ? "partial" : "success";
     syncRun.finishedAt = new Date().toISOString();
     syncRun.durationMs = Date.now() - startTime;
     await storage.appendSyncHistory(syncRun);
 
-    // Step 13: Release lock
+    // Step 11: Release lock
     await releaseLock(runId);
 
     return {

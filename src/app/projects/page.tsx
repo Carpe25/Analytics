@@ -24,6 +24,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConnectRepoDialog } from "@/components/github/connect-repo-dialog";
+import { AddClientDialog } from "@/components/clients/add-client-dialog";
+import { AddProjectDialog } from "@/components/projects/add-project-dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Client } from "@/types";
 import { formatMonthName } from "@/lib/utils";
 
 interface ClientProjectBreakdown {
@@ -62,6 +66,22 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedProjectForRepo, setSelectedProjectForRepo] = useState<string | undefined>();
+  const [clientsList, setClientsList] = useState<Client[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [addClientOpen, setAddClientOpen] = useState(false);
+  const [addProjectOpen, setAddProjectOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("breakdown");
+
+  const loadClients = useCallback(() => {
+    setLoadingClients(true);
+    fetch("/api/clients")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.clients) setClientsList(data.clients);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingClients(false));
+  }, []);
 
   const loadProjects = useCallback(() => {
     setLoading(true);
@@ -136,7 +156,8 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadProjects();
-  }, [loadProjects]);
+    loadClients();
+  }, [loadProjects, loadClients]);
 
   // Extract all unique client names from current breakdown
   const allClientNames = useMemo(() => {
@@ -206,17 +227,35 @@ export default function ProjectsPage() {
         description="Client-wise breakdown, project hours, direct task categories from sheet, and connected GitHub repositories"
         onSyncComplete={loadProjects}
         actions={
-          <Button
-            size="sm"
-            onClick={() => {
-              setSelectedProjectForRepo(undefined);
-              setDialogOpen(true);
-            }}
-            className="gap-2 text-xs font-medium bg-white text-[#17212B] border border-[#17212B]/20 rounded-full shadow-sm hover:bg-gray-50"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Connect GitHub Repository</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => setAddClientOpen(true)}
+              className="gap-1.5 text-xs font-semibold bg-white text-[#17212B] border border-[#17212B]/20 rounded-full shadow-sm hover:bg-gray-50"
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              <span>Add Client</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setAddProjectOpen(true)}
+              className="gap-1.5 text-xs font-semibold bg-[#17212B] text-white rounded-full shadow-sm hover:bg-[#17212B]/90"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Project</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setSelectedProjectForRepo(undefined);
+                setDialogOpen(true);
+              }}
+              className="gap-1.5 text-xs font-medium bg-white text-[#17212B] border border-[#17212B]/20 rounded-full shadow-sm hover:bg-gray-50"
+            >
+              <GitBranch className="h-3.5 w-3.5" />
+              <span>Connect Repo</span>
+            </Button>
+          </div>
         }
       />
 
@@ -267,7 +306,27 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {/* Clean Filter Controls Bar (Curved White Inputs) */}
+        {/* View Switcher Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
+          <TabsList className="bg-transparent border-b border-[#17212B]/15 rounded-none p-0 w-full justify-start gap-6 h-10">
+            <TabsTrigger
+              value="breakdown"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent px-2 pb-2 text-xs font-bold text-[#17212B]/60 data-[state=active]:text-[#17212B] gap-2 shadow-none"
+            >
+              <Layers className="h-4 w-4" />
+              <span>Project Work Breakdown</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="clients"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#17212B] data-[state=active]:bg-transparent px-2 pb-2 text-xs font-bold text-[#17212B]/60 data-[state=active]:text-[#17212B] gap-2 shadow-none"
+            >
+              <Building2 className="h-4 w-4" />
+              <span>Clients Table ({clientsList.length})</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="breakdown" className="space-y-6 mt-0">
+            {/* Clean Filter Controls Bar (Curved White Inputs) */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#17212B]/15">
           <div className="flex flex-wrap items-center gap-3">
             {/* Month Filter */}
@@ -659,6 +718,179 @@ export default function ProjectsPage() {
             })}
           </div>
         )}
+          </TabsContent>
+
+          {/* Dedicated Clients Directory Tab */}
+          <TabsContent value="clients" className="space-y-6 mt-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#17212B]/15">
+              <div>
+                <h3 className="text-base font-bold text-[#17212B]">
+                  Client Organizations Directory
+                </h3>
+                <p className="text-xs text-[#17212B]/70 mt-0.5">
+                  Registered clients used for project categorization, work log aggregation, and ticket submissions.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setAddClientOpen(true)}
+                  className="gap-1.5 text-xs font-semibold bg-white text-[#17212B] border border-[#17212B]/20 rounded-full shadow-sm hover:bg-gray-50"
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                  <span>Add Client</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setAddProjectOpen(true)}
+                  className="gap-1.5 text-xs font-semibold bg-[#17212B] text-white rounded-full shadow-sm hover:bg-[#17212B]/90"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Add Project</span>
+                </Button>
+              </div>
+            </div>
+
+            {loadingClients ? (
+              <div className="p-12 text-center text-xs text-[#17212B]/60">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-[#17212B]/50" />
+                <span>Loading clients directory...</span>
+              </div>
+            ) : clientsList.length === 0 ? (
+              <div className="p-12 text-center border border-dashed border-[#17212B]/20 rounded-3xl bg-white space-y-3">
+                <Building2 className="h-8 w-8 text-[#17212B]/40 mx-auto" />
+                <div className="text-sm font-semibold text-[#17212B]">No Clients Registered</div>
+                <p className="text-xs text-[#17212B]/60 max-w-sm mx-auto">
+                  Add your first client to start organizing projects and routing support tickets.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => setAddClientOpen(true)}
+                  className="gap-1.5 text-xs font-semibold rounded-full mt-2"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Add First Client</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="border border-[#17212B]/15 rounded-3xl bg-white overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader className="bg-[#F5F7F8]">
+                    <TableRow className="border-b border-[#17212B]/10">
+                      <TableHead className="text-xs font-bold text-[#17212B] py-3.5 pl-6">
+                        Client Name
+                      </TableHead>
+                      <TableHead className="text-xs font-bold text-[#17212B] py-3.5">
+                        Code
+                      </TableHead>
+                      <TableHead className="text-xs font-bold text-[#17212B] py-3.5">
+                        Description
+                      </TableHead>
+                      <TableHead className="text-xs font-bold text-[#17212B] py-3.5">
+                        Active Projects
+                      </TableHead>
+                      <TableHead className="text-xs font-bold text-[#17212B] py-3.5 pr-6 text-right">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientsList.map((client) => {
+                      const clientProjects = clientBreakdown.find(
+                        (cb) => cb.clientName.toLowerCase() === client.name.toLowerCase()
+                      )?.projects || [];
+
+                      return (
+                        <TableRow
+                          key={client.id}
+                          className="border-b border-[#17212B]/10 hover:bg-[#F5F7F8]/40"
+                        >
+                          <TableCell className="py-4 pl-6">
+                            <div className="flex items-center gap-2.5">
+                              <div className="h-8 w-8 rounded-xl bg-[#17212B]/5 flex items-center justify-center text-[#17212B] shrink-0 font-bold text-xs">
+                                {client.code || client.name.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="text-xs font-bold text-[#17212B]">
+                                  {client.name}
+                                </div>
+                                <div className="text-[10px] text-[#17212B]/50 font-mono">
+                                  {client.id}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-4">
+                            {client.code ? (
+                              <Badge
+                                variant="outline"
+                                className="font-mono text-[10px] font-bold bg-[#17212B]/5 text-[#17212B] border-[#17212B]/20 rounded-md"
+                              >
+                                {client.code}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-[#17212B]/40">—</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="py-4 max-w-xs">
+                            <span className="text-xs text-[#17212B]/75 line-clamp-1">
+                              {client.description || "—"}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="py-4">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className="text-xs font-semibold rounded-full bg-white border-[#17212B]/20"
+                              >
+                                {clientProjects.length} {clientProjects.length === 1 ? "project" : "projects"}
+                              </Badge>
+                              {clientProjects.length > 0 && (
+                                <span className="text-[11px] text-[#17212B]/60 truncate max-w-[200px]">
+                                  {clientProjects.map((p) => p.name).join(", ")}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-4 pr-6 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setAddProjectOpen(true);
+                                }}
+                                className="h-7 text-xs font-semibold gap-1 rounded-full border-[#17212B]/20 hover:bg-[#F5F7F8]"
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span>Add Project</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedClient(client.name);
+                                  setActiveTab("breakdown");
+                                }}
+                                className="h-7 text-xs text-[#17212B]/70 hover:text-[#17212B] rounded-full"
+                              >
+                                <span>View Hours →</span>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <ConnectRepoDialog
@@ -666,6 +898,25 @@ export default function ProjectsPage() {
         onClose={() => setDialogOpen(false)}
         defaultProjectId={selectedProjectForRepo}
         onSuccess={loadProjects}
+      />
+
+      <AddClientDialog
+        isOpen={addClientOpen}
+        onClose={() => setAddClientOpen(false)}
+        onSuccess={() => {
+          loadClients();
+          loadProjects();
+        }}
+      />
+
+      <AddProjectDialog
+        isOpen={addProjectOpen}
+        onClose={() => setAddProjectOpen(false)}
+        onSuccess={() => {
+          loadProjects();
+          loadClients();
+        }}
+        onOpenAddClient={() => setAddClientOpen(true)}
       />
     </div>
   );

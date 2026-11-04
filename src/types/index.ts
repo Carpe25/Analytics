@@ -81,10 +81,20 @@ export interface GitHubRepoConfig {
   defaultBranch?: string;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  code?: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProjectConfig {
   id: string;
   name: string;
   code?: string;
+  clientId?: string;
   client?: string;
   aliases?: string[];
   githubRepos?: GitHubRepoConfig[];
@@ -120,6 +130,7 @@ export interface IntegrationSettings {
   googleSheets: GoogleSheetsConfig;
   projects: ProjectConfig[];
   developerGithubMapping: Record<string, string[]>; // developerId -> github usernames
+  clients?: Client[];
 }
 
 export interface SyncRun {
@@ -168,4 +179,34 @@ export interface AnalyticsSnapshot {
     commitCount: number;
   }[];
   warnings: string[];
+}
+
+export type TicketStatus = "under_review" | "open" | "assigned" | "resolved";
+
+export interface Ticket {
+  id: string;
+  ticketNumber: string; // e.g. TCK-101
+  client: string;
+  projectId: string;
+  projectName: string;
+  issue: string;
+  photoUrl?: string;
+  status: TicketStatus;
+  raisedByName?: string;
+  createdAtUtc: string;
+  reviewedAtUtc?: string;
+  reviewedBy?: string;
+  assignedToDeveloperId?: string;
+  assignedToDeveloperName?: string;
+  assignedAtUtc?: string;
+  updatedAtUtc: string;
+}
+
+export type UserRole = "manager" | "developer";
+
+export interface AuthUser {
+  username: string;
+  name: string;
+  role: UserRole;
+  developerId?: string;
 }

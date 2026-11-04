@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { IArtifactStorage, SyncLockInfo } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 export class LocalArtifactStorage implements IArtifactStorage {
@@ -10,6 +10,7 @@ export class LocalArtifactStorage implements IArtifactStorage {
   private latestFilePath: string;
   private historyFilePath: string;
   private settingsFilePath: string;
+  private clientsFilePath: string;
 
   constructor(baseDir: string = ".artifacts") {
     this.baseDir = path.isAbsolute(baseDir) ? baseDir : path.resolve(process.cwd(), baseDir);
@@ -17,6 +18,7 @@ export class LocalArtifactStorage implements IArtifactStorage {
     this.latestFilePath = path.join(this.baseDir, "analytics", "latest.json");
     this.historyFilePath = path.join(this.baseDir, "sync", "history.jsonl");
     this.settingsFilePath = path.join(this.baseDir, "config", "settings.json");
+    this.clientsFilePath = path.join(this.baseDir, "config", "clients.json");
   }
 
   async init(): Promise<void> {
@@ -190,6 +192,72 @@ export class LocalArtifactStorage implements IArtifactStorage {
   async writeIntegrationSettings(settings: IntegrationSettings): Promise<void> {
     const validated = IntegrationSettingsSchema.parse(settings);
     await this.atomicWrite(this.settingsFilePath, JSON.stringify(validated, null, 2));
+  }
+
+  async readClients(): Promise<Client[]> {
+    try {
+      const data = await fs.readFile(this.clientsFilePath, "utf8");
+      return JSON.parse(data) as Client[];
+    } catch (err: any) {
+      if (err.code === "ENOENT") {
+        // Fallback / seed from settings
+        const settings = await this.readIntegrationSettings();
+        const clientMap = new Map<string, Client>();
+        const defaultSeeds = [
+          { name: "Carpe Diem", code: "CD" },
+          { name: "Effision", code: "EFF" },
+          { name: "Univ Diam", code: "UD" },
+          { name: "Level Up", code: "LU" },
+          { name: "Lumen", code: "LUM" },
+          { name: "Internal / Operations", code: "INT" },
+        ];
+        for (const d of defaultSeeds) {
+          const id = `client-${d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+          clientMap.set(d.name.toLowerCase(), { id, name: d.name, code: d.code });
+        }
+        if (settings?.projects) {
+          for (const p of settings.projects) {
+            if (p.client && p.client.trim()) {
+              const raw = p.client.trim();
+              if (!clientMap.has(raw.toLowerCase())) {
+                const id = `client-${raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+                clientMap.set(raw.toLowerCase(), { id, name: raw, code: p.code });
+              }
+            }
+          }
+        }
+        const clients = Array.from(clientMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+        await this.atomicWrite(this.clientsFilePath, JSON.stringify(clients, null, 2)).catch(() => {});
+        return clients;
+      }
+      return [];
+    }
+  }
+
+  async saveClient(client: Client): Promise<void> {
+    const clients = await this.readClients();
+    const id = client.id || `client-${client.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+    const updatedClient: Client = {
+      ...client,
+      id,
+      name: client.name.trim(),
+      updatedAt: new Date().toISOString(),
+      createdAt: client.createdAt || new Date().toISOString(),
+    };
+    const index = clients.findIndex((c) => c.id === id || c.name.toLowerCase() === updatedClient.name.toLowerCase());
+    if (index >= 0) {
+      clients[index] = { ...clients[index], ...updatedClient };
+    } else {
+      clients.push(updatedClient);
+    }
+    clients.sort((a, b) => a.name.localeCompare(b.name));
+    await this.atomicWrite(this.clientsFilePath, JSON.stringify(clients, null, 2));
+  }
+
+  async deleteClient(id: string): Promise<void> {
+    const clients = await this.readClients();
+    const filtered = clients.filter((c) => c.id !== id);
+    await this.atomicWrite(this.clientsFilePath, JSON.stringify(filtered, null, 2));
   }
 
   async getMcpWorkLogs(): Promise<WorkLog[]> {

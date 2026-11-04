@@ -1,6 +1,6 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { IArtifactStorage, SyncLockInfo } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, Client } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 export class S3ArtifactStorage implements IArtifactStorage {
@@ -172,6 +172,71 @@ export class S3ArtifactStorage implements IArtifactStorage {
   async writeIntegrationSettings(settings: IntegrationSettings): Promise<void> {
     const validated = IntegrationSettingsSchema.parse(settings);
     await this.putObjectString("config/settings.json", JSON.stringify(validated, null, 2));
+  }
+
+  async readClients(): Promise<Client[]> {
+    try {
+      const raw = await this.getObjectString("config/clients.json");
+      if (raw) {
+        return JSON.parse(raw) as Client[];
+      }
+      const settings = await this.readIntegrationSettings();
+      const clientMap = new Map<string, Client>();
+      const defaultSeeds = [
+        { name: "Carpe Diem", code: "CD" },
+        { name: "Effision", code: "EFF" },
+        { name: "Univ Diam", code: "UD" },
+        { name: "Level Up", code: "LU" },
+        { name: "Lumen", code: "LUM" },
+        { name: "Internal / Operations", code: "INT" },
+      ];
+      for (const d of defaultSeeds) {
+        const id = `client-${d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+        clientMap.set(d.name.toLowerCase(), { id, name: d.name, code: d.code });
+      }
+      if (settings?.projects) {
+        for (const p of settings.projects) {
+          if (p.client && p.client.trim()) {
+            const rawClient = p.client.trim();
+            if (!clientMap.has(rawClient.toLowerCase())) {
+              const id = `client-${rawClient.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+              clientMap.set(rawClient.toLowerCase(), { id, name: rawClient, code: p.code });
+            }
+          }
+        }
+      }
+      const clients = Array.from(clientMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      await this.putObjectString("config/clients.json", JSON.stringify(clients, null, 2)).catch(() => {});
+      return clients;
+    } catch {
+      return [];
+    }
+  }
+
+  async saveClient(client: Client): Promise<void> {
+    const clients = await this.readClients();
+    const id = client.id || `client-${client.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+    const updatedClient: Client = {
+      ...client,
+      id,
+      name: client.name.trim(),
+      updatedAt: new Date().toISOString(),
+      createdAt: client.createdAt || new Date().toISOString(),
+    };
+    const index = clients.findIndex((c) => c.id === id || c.name.toLowerCase() === updatedClient.name.toLowerCase());
+    if (index >= 0) {
+      clients[index] = { ...clients[index], ...updatedClient };
+    } else {
+      clients.push(updatedClient);
+    }
+    clients.sort((a, b) => a.name.localeCompare(b.name));
+    await this.putObjectString("config/clients.json", JSON.stringify(clients, null, 2));
+  }
+
+  async deleteClient(id: string): Promise<void> {
+    const clients = await this.readClients();
+    const filtered = clients.filter((c) => c.id !== id);
+    await this.putObjectString("config/clients.json", JSON.stringify(filtered, null, 2));
   }
 
   async getMcpWorkLogs(): Promise<WorkLog[]> {

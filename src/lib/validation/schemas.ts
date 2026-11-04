@@ -69,10 +69,20 @@ export const GitHubRepoConfigSchema = z.object({
   defaultBranch: z.string().default("main").optional(),
 });
 
+export const ClientSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  code: z.string().optional(),
+  description: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
 export const ProjectConfigSchema = z.object({
   id: z.string().min(1, "Project ID is required"),
   name: z.string().min(1, "Project name is required"),
   code: z.string().optional(),
+  clientId: z.string().optional(),
   client: z.string().optional(),
   aliases: z.array(z.string()).optional(),
   githubRepos: z.array(GitHubRepoConfigSchema).optional(),
@@ -110,4 +120,5 @@ export const IntegrationSettingsSchema = z.object({
   }),
   projects: z.array(ProjectConfigSchema),
   developerGithubMapping: z.record(z.array(z.string())).default({}),
+  clients: z.array(ClientSchema).optional().default([]),
 });
