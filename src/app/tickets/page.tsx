@@ -22,6 +22,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Ticket, AuthUser } from "@/types";
 
+function getDisplayPhotoUrl(url?: string | null): string {
+  if (!url) return "";
+  if (url.startsWith("/api/tickets/photos/")) return url;
+  const keyMatch = url.match(/tickets\/photos\/.+$/);
+  if (keyMatch) {
+    return `/api/tickets/photos/${encodeURIComponent(keyMatch[0])}`;
+  }
+  return url;
+}
+
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -310,11 +320,11 @@ export default function TicketsPage() {
                     <div className="pt-1">
                       <button
                         type="button"
-                        onClick={() => setPreviewPhoto(ticket.photoUrl || null)}
+                        onClick={() => setPreviewPhoto(getDisplayPhotoUrl(ticket.photoUrl) || null)}
                         className="w-full h-24 rounded-2xl border border-[#17212B]/15 overflow-hidden relative group text-left"
                       >
                         <img
-                          src={ticket.photoUrl}
+                          src={getDisplayPhotoUrl(ticket.photoUrl)}
                           alt="Ticket photo"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
@@ -414,7 +424,7 @@ export default function TicketsPage() {
               <X className="h-5 w-5" />
             </button>
             <img
-              src={previewPhoto}
+              src={getDisplayPhotoUrl(previewPhoto)}
               alt="Full size screenshot"
               className="max-h-[82vh] w-auto object-contain rounded-2xl mx-auto"
             />
