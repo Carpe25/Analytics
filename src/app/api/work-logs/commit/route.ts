@@ -150,6 +150,36 @@ export async function POST(req: NextRequest) {
 
   repoName = repoName.replace(/\.git$/i, "");
 
+  // Helper: Extract explicit duration from commit message if provided: e.g. [time: 4.5h], [5h], [90m], [1.5 hrs]
+  function parseDurationFromMessage(msg: string): { durationMinutes: number; cleanMessage: string } | null {
+    // Matches patterns like [time: 4.5h], [time: 90m], [4h], [2.5h], [90m], [1h 30m], [1.5 hrs]
+    const tagMatch = msg.match(/\[(?:time:\s*)?(\d+(?:\.\d+)?)\s*(h|hr|hrs|hours?|m|min|mins|minutes?)(?:\s+(\d+(?:\.\d+)?)\s*(?:m|min|mins|minutes?))?\]/i);
+    if (!tagMatch) return null;
+
+    const fullTag = tagMatch[0];
+    const firstVal = parseFloat(tagMatch[1]);
+    const firstUnit = tagMatch[2].toLowerCase();
+    const secondVal = tagMatch[3] ? parseFloat(tagMatch[3]) : 0;
+
+    let totalMinutes = 0;
+    if (firstUnit.startsWith("h")) {
+      totalMinutes = firstVal * 60 + secondVal;
+    } else {
+      totalMinutes = firstVal;
+    }
+
+    if (isNaN(totalMinutes) || totalMinutes <= 0) return null;
+
+    // Remove the tag from commit description to keep reports clean
+    const cleanMessage = msg.replace(fullTag, "").trim().replace(/\s{2,}/g, " ");
+    return {
+      durationMinutes: Math.round(totalMinutes),
+      cleanMessage,
+    };
+  }
+
+  const explicitTag = parseDurationFromMessage(data.message);
+
   // 2. Resolve Project & Client
   let resolvedProj = data.project
     ? resolveProject(data.project, data.client, settings.projects, snapshot.projects)
@@ -191,13 +221,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Duration computation with guardrails
+  // Duration computation with explicit override and intelligent workday windowing
   let durationMinutes = data.defaultSessionMinutes;
   let calculationRule = "default_session";
   let rawDeltaMinutes: number | null = null;
 
-  if (prevMs && currMs > prevMs) {
+  if (explicitTag) {
+    // Priority 1: Developer explicitly marked the duration in commit: [4.5h], [5h], [90m]
+    durationMinutes = explicitTag.durationMinutes;
+    calculationRule = "explicit_commit_tag";
+  } else if (prevMs && currMs > prevMs) {
     rawDeltaMinutes = Math.round((currMs - prevMs) / (60 * 1000));
+
+    // Check if the previous commit happened on the same calendar day in developer's timezone
+    const currDay = formatDateInTimezone(new Date(currMs), env.appTimezone);
+    const prevDay = formatDateInTimezone(new Date(prevMs), env.appTimezone);
+    const isSameDay = currDay === prevDay;
+
+    // Same-day threshold expands up to 480 minutes (8 hours)
+    // Multi-day/overnight threshold uses maxGapMinutes (default 240m / 4h)
+    const effectiveMaxGap = isSameDay ? 480 : data.maxGapMinutes;
 
     if (rawDeltaMinutes <= 0) {
       durationMinutes = data.minDurationMinutes;
@@ -205,13 +248,14 @@ export async function POST(req: NextRequest) {
     } else if (rawDeltaMinutes < data.minDurationMinutes) {
       durationMinutes = data.minDurationMinutes;
       calculationRule = "minimum_floor_micro_commit";
-    } else if (rawDeltaMinutes > data.maxGapMinutes) {
+    } else if (rawDeltaMinutes > effectiveMaxGap) {
+      // Overnight or very long idle gap between days: default session applies
       durationMinutes = data.defaultSessionMinutes;
-      calculationRule = `clamped_gap_exceeded_${data.maxGapMinutes}m`;
+      calculationRule = `clamped_gap_exceeded_${effectiveMaxGap}m`;
     } else {
-      // Round to nearest 5 minutes
+      // Normal active commit flow: round to nearest 5 minutes
       durationMinutes = Math.max(data.minDurationMinutes, Math.round(rawDeltaMinutes / 5) * 5);
-      calculationRule = "exact_delta_from_previous_commit";
+      calculationRule = isSameDay ? "same_day_active_session_delta" : "exact_delta_from_previous_commit";
     }
   }
 
@@ -245,7 +289,8 @@ export async function POST(req: NextRequest) {
 
   // 7. Create WorkLog
   const logId = `log-git-${Date.now()}-${shortSha}`;
-  const firstLineMessage = data.message.trim().split("\n")[0];
+  const effectiveMessage = explicitTag ? explicitTag.cleanMessage : data.message.trim();
+  const firstLineMessage = effectiveMessage.split("\n")[0];
   const newLog: WorkLog = {
     id: logId,
     date: workDate,

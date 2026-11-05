@@ -6,6 +6,8 @@ This guide provides end-to-end instructions for installing, configuring, updatin
 
 ## Table of Contents
 1. [How It Works (MCP Tools + Auto-Commit Logging)](#1-how-it-works)
+   - [Time Calculation & Intelligent Windowing](#time-calculation--intelligent-windowing)
+   - [Manual Time Overrides via Commit Tags (`[time: 5h]`)](#manual-time-overrides-via-commit-tags)
 2. [Fresh Installation (For New Developers)](#2-fresh-installation-for-new-developers)
    - [macOS (Apple Silicon & Intel)](#21-macos-setup)
    - [Windows (PowerShell)](#22-windows-setup)
@@ -64,6 +66,34 @@ The tracker integrates your developer workflow into the **Project Analytics Plat
      ```bash
      ✔ [Analytics] Logged 0.75h to Custom Portal (Univ Diam) | Today's Total: 3.5h
      ```
+
+### Time Calculation & Intelligent Windowing
+
+The system calculates duration using smart calendar-day windowing to prevent accidental overnight runaway logs while honoring long coding sessions:
+
+- **Same-Day Continuous Sessions**: If you are working on the same calendar day, active sessions are recognized up to **8 hours (480 minutes)**. Your exact delta between commits is rounded to the nearest 5 minutes.
+- **Overnight / Next-Day First Commit**: When your previous commit was yesterday (or $>4$ hours ago), the system assumes this is your first commit of the day and defaults to **45 minutes (0.75h)**.
+- **Quick Micro-Commits**: Commits made within 10 minutes of the previous commit are floored to **10 minutes (0.17h)** so quick typo fixes or formatting changes receive minimum work credit.
+
+### Manual Time Overrides via Commit Tags
+
+If an issue takes longer than 4 hours, or if your first commit of the day was after 1.5–2 hours of continuous work, you can explicitly override the time in your commit message using brackets:
+
+```bash
+# Explicit hours
+git commit -m "feat(auth): complete OAuth migration [time: 5h]"
+git commit -m "fix(cad): resolve heavy mesh render leak [3.5h]"
+
+# First commit of the morning after 1.5 hours of work
+git commit -m "feat(api): scaffold new client endpoints [1.5h]"
+
+# Minute formats
+git commit -m "docs: write architecture overview [90m]"
+```
+
+**Supported tag patterns:**
+- `[time: 5h]`, `[5h]`, `[5.5 hrs]`, `[2h 30m]`, `[90m]`
+- The system automatically parses the tag, sets the exact work log duration (e.g. `5.0h` or `1.5h`), and strips the tag from the final title stored on the dashboard.
 
 ---
 
