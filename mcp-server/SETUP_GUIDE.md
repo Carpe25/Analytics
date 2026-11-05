@@ -1,51 +1,88 @@
-# Cross-Platform MCP Tracker Setup Guide (macOS & Windows)
+# Carpe Analytics MCP Tracker & Git Commit Auto-Logger Setup Guide
 
-This guide walks you through installing, configuring, and troubleshooting the **Carpe Analytics MCP Tracker** on **macOS** and **Windows** (with Linux reference included).
+This guide provides end-to-end instructions for installing, configuring, updating, and troubleshooting the **Carpe Analytics MCP Tracker** and **Global Git Commit Auto-Logger** on **macOS**, **Windows**, and **Linux**.
 
 ---
 
 ## Table of Contents
-1. [Overview & Requirements](#1-overview--requirements)
-2. [macOS Setup Guide](#2-macos-setup-guide)
-3. [Windows Setup Guide](#3-windows-setup-guide)
-4. [Linux & Snap Sandbox Reference](#4-linux--snap-sandbox-reference)
+1. [How It Works (MCP Tools + Auto-Commit Logging)](#1-how-it-works)
+2. [Fresh Installation (For New Developers)](#2-fresh-installation-for-new-developers)
+   - [macOS (Apple Silicon & Intel)](#21-macos-setup)
+   - [Windows (PowerShell)](#22-windows-setup)
+   - [Linux (Ubuntu / Debian / Snap)](#23-linux-setup)
+3. [Upgrade Guide (For Existing Developers / Already Cloned)](#3-upgrade-guide-for-existing-developers)
+4. [Manual Editor Configuration (Alternative to Auto-Setup)](#4-manual-editor-configuration)
 5. [Testing & Verification](#5-testing--verification)
-6. [Troubleshooting & Common Issues](#6-troubleshooting--common-issues)
-   - [Issue 1: `node: command not found` in GUI Apps (macOS/Windows)](#issue-1-node-command-not-found-in-gui-apps)
-   - [Issue 2: Windows JSON Backslash Escaping](#issue-2-windows-json-backslash-escaping)
-   - [Issue 3: PowerShell Execution Policy Restrictions on Windows](#issue-3-powershell-execution-policy-restrictions)
-   - [Issue 4: AI Assistant Does Not Detect New Tools (Restarting)](#issue-4-ai-assistant-does-not-detect-new-tools)
-   - [Issue 5: API Connection / Firewall / VPN Issues](#issue-5-api-connection-or-vpn-issues)
-   - [Issue 6: Developer Name & Client Name Matching](#issue-6-developer-name--client-name-matching)
+   - [Test 1: Verify AI Assistant MCP Tools](#test-1-verify-ai-assistant-mcp-tools)
+   - [Test 2: Verify Automatic Git Commit Logging](#test-2-verify-automatic-git-commit-logging)
+6. [Troubleshooting & Common Questions](#6-troubleshooting--common-questions)
 
 ---
 
-## 1. Overview & Requirements
+## 1. How It Works
 
-The **Carpe Analytics MCP Tracker** exposes Model Context Protocol (MCP) tools (`log_work`, `get_daily_summary`, `get_available_projects`, etc.) to AI assistants (Cursor, Claude Desktop, Antigravity, Windsurf, Zed).
+The tracker integrates your developer workflow into the **Project Analytics Platform** through two complementary channels:
 
-### Prerequisites:
-- **Node.js**: Version 18.0 or newer (Run `node -v` to verify).
-- **Git**: Installed and available in PATH.
-- **AI Assistant**: Any of Cursor, Claude Desktop, Antigravity / Gemini CLI, Windsurf, or Zed.
-
----
-
-## 2. macOS Setup Guide
-
-### Step 1: Install Node.js & Git (if not already installed)
-If you don't have Node.js, install it via Homebrew:
-```bash
-brew install node git
 ```
-Check installation:
+┌────────────────────────────────────────────────────────────────────────┐
+│                        DEVELOPER ENVIRONMENT                           │
+├──────────────────────────────────┬─────────────────────────────────────┤
+│      1. AI ASSISTANT (MCP)       │       2. GIT COMMITS & PUSHES       │
+│  (Cursor / Claude / Antigravity) │          (Any Terminal / IDE)       │
+│                                  │                                     │
+│  "Log 1.5h on Custom Portal      │  git commit -m "feat(auth): login"  │
+│   for Univ Diam fixing bug"      │                  │                  │
+│                │                 │                  ▼                  │
+│                ▼                 │        [Global Post-Commit Hook]    │
+│         [MCP Server Tools]       │        • Calculates elapsed time    │
+│         • log_work               │        • Resolves project & client  │
+│         • get_my_logs            │        • Maps commit category       │
+│         • list_projects          │                  │                  │
+└────────────────┬─────────────────┴──────────────────┬──────────────────┘
+                 │                                    │
+                 ▼                                    ▼
+       ┌────────────────────────────────────────────────────────┐
+       │             CARPE ANALYTICS CLOUD PLATFORM             │
+       │     (https://analytics-two-ashen.vercel.app/api)       │
+       │                                                        │
+       │ • Deduplicated Client & Project Breakdown              │
+       │ • Developer Dashboard & Live Work Logs                 │
+       │ • Synchronized with Neon Database & GitHub Sync        │
+       └────────────────────────────────────────────────────────┘
+```
+
+1. **Conversational AI Logging (MCP Tools)**:
+   Your AI assistant (Cursor, Claude Desktop, Antigravity CLI, Windsurf, Zed) gains native tools (`log_work`, `get_my_logs`, `list_projects`, `list_categories`). You can log time conversationally at any point during pair programming.
+
+2. **Automatic Git Commit Logging (Zero-Effort Background Logging)**:
+   Whenever you run `git commit` in any repository linked to a project in the analytics system (e.g. `custom-portal`, `cad-portal`, `admin-portal`):
+   - The global Git hook triggers automatically in the background.
+   - It captures the commit hash, author, branch, and commit message.
+   - It intelligently calculates time worked since your previous commit.
+   - It categorizes the task based on standard commit conventions (`feat:` → *Frontend/Backend*, `fix:` → *Bug Fix*, `docs:` → *Documentation*, etc.).
+   - It transmits the log directly to the Analytics API and outputs a confirmation badge right inside your terminal:
+     ```bash
+     ✔ [Analytics] Logged 0.75h to Custom Portal (Univ Diam) | Today's Total: 3.5h
+     ```
+
+---
+
+## 2. Fresh Installation (For New Developers)
+
+Follow the section for your operating system:
+
+### 2.1. macOS Setup
+
+#### Step 1: Ensure Prerequisites
+Verify that **Node.js** (v18+) and **Git** are installed:
 ```bash
 node -v
 git --version
 ```
+*(If Node.js is missing, install via Homebrew: `brew install node git`)*.
 
-### Step 2: Clone & Build the Tracker
-Choose a standard visible directory (avoid hidden folders starting with a dot):
+#### Step 2: Clone and Build the Tracker
+Choose a standard visible directory in your user profile:
 ```bash
 mkdir -p ~/mcp-servers
 cd ~/mcp-servers
@@ -55,95 +92,153 @@ npm install
 npm run build
 ```
 
-### Step 3: Run the Auto-Setup Script
-Run the automated configuration command, replacing `"Your Name"` with your developer name:
+#### Step 3: Run the Auto-Setup Command
+Run the setup command, replacing `"Your Full Name"` with your developer name:
 ```bash
-node build/index.js setup --name "Your Name"
+node build/index.js setup --name "Your Full Name"
 ```
-*(Optionally pass `--url https://analytics-two-ashen.vercel.app/api` if using a custom endpoint).*
+*(Optional: If your team uses a custom deployment URL, pass `--url https://your-domain.com/api`)*.
 
-The setup script automatically:
-1. **Configures all AI Editors**:
-   - **Cursor**: `~/Library/Application Support/Cursor/User/globalStorage/cursor.mcp/mcp.json` and `~/.cursor/mcp.json`
-   - **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Antigravity CLI**: `~/.gemini/config/mcp_config.json`
-   - **Windsurf**: `~/.codeium/windsurf/mcp_config.json`
-   - **Zed Editor**: `~/.config/zed/settings.json`
-2. **Installs the Global Git Auto-Logger Hook**:
-   - Creates `~/.git-tracker-hooks/post-commit`
-   - Sets `git config --global core.hooksPath ~/.git-tracker-hooks`
-   - **Zero additional setup needed**: Whenever you `git commit` or `git push` in any connected repository (e.g., `admin-portal`), your work and time from the last commit are logged automatically to that project and client (e.g., **Admin Portal** under **Carpe Diem**)!
+**What this command does automatically:**
+1. Detects and configures all installed AI editors (**Cursor**, **Claude Desktop**, **Antigravity CLI**, **Windsurf**, **Zed**, and **VS Code Cline**).
+2. Generates the global Git hook in `~/.git-tracker-hooks/post-commit`.
+3. Configures `git config --global core.hooksPath ~/.git-tracker-hooks`.
 
-### Step 4: Manual macOS Configuration (Alternative)
-If you prefer configuring manually, add this block to your editor's config file (e.g., `~/.cursor/mcp.json` or `~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "project-analytics": {
-      "command": "/usr/local/bin/node",
-      "args": [
-        "/Users/YOUR_MAC_USERNAME/mcp-servers/tracker-mcp/build/index.js"
-      ],
-      "env": {
-        "TRACKER_API_URL": "https://analytics-two-ashen.vercel.app/api",
-        "DEVELOPER_NAME": "Your Name"
-      }
-    }
-  }
-}
-```
-*(On Apple Silicon Macs, Homebrew node is at `/opt/homebrew/bin/node`; run `which node` to find your exact path).*
+#### Step 4: Restart Your Editors
+Quit and restart your AI editor (Cursor, Claude Desktop, etc.) so it loads the newly added MCP tools.
 
 ---
 
-## 3. Windows Setup Guide
+### 2.2. Windows Setup
 
-### Step 1: Install Node.js & Git for Windows
-1. Download and run the **Node.js LTS installer (.msi)** from [nodejs.org](https://nodejs.org/). Ensure **"Add to PATH"** is selected.
+#### Step 1: Ensure Prerequisites
+1. Install **Node.js LTS (v18+)** from [nodejs.org](https://nodejs.org/). Make sure the option **"Add to PATH"** is checked.
 2. Install **Git for Windows** from [git-scm.com](https://git-scm.com/).
-3. Open **PowerShell** or **Command Prompt** as an administrator or your standard user and verify:
+3. Open **PowerShell** and verify:
    ```powershell
    node -v
    npm -v
    git --version
    ```
 
-### Step 2: Clone & Build the Tracker
-Open **PowerShell** and run:
+#### Step 2: Clone and Build the Tracker
+In **PowerShell**, run:
 ```powershell
 # Create a dedicated directory in your user profile
 New-Item -ItemType Directory -Force -Path "$HOME\mcp-servers"
 cd "$HOME\mcp-servers"
 
-# Clone the repository
+# Clone repository
 git clone https://github.com/Carpe25/tracker-mcp.git
 cd tracker-mcp
 
-# Install dependencies and build
+# Install dependencies and compile
 npm install
 npm run build
 ```
 
-### Step 3: Run the Auto-Setup Script
-Run the automated configuration script:
+> [!TIP]
+> If PowerShell blocks `npm` with a script execution policy error, run:
+> `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`
+
+#### Step 3: Run the Auto-Setup Command
+Run the setup command with your developer name:
 ```powershell
-node build/index.js setup --name "Your Name"
+node build/index.js setup --name "Your Full Name"
 ```
 
-On Windows, the script automatically:
-1. **Configures all AI Editors**:
-   - **Cursor**: `%APPDATA%\Cursor\User\globalStorage\cursor.mcp\mcp.json` and `%USERPROFILE%\.cursor\mcp.json`
-   - **Claude Desktop**: `%APPDATA%\Claude\claude_desktop_config.json`
-   - **Windsurf**: `%USERPROFILE%\.codeium\windsurf\mcp_config.json`
-   - **Antigravity CLI**: `%USERPROFILE%\.gemini\config\mcp_config.json`
-2. **Installs the Global Git Auto-Logger Hook**:
-   - Creates `%USERPROFILE%\.git-tracker-hooks\post-commit`
-   - Configures Git: `git config --global core.hooksPath "$HOME/.git-tracker-hooks"`
-   - Automatically tracks every commit and push across your connected repositories!
+**What this command does automatically on Windows:**
+1. Writes valid, properly-escaped JSON configurations to Cursor (`%APPDATA%\Cursor` and `%USERPROFILE%\.cursor`), Claude Desktop (`%APPDATA%\Claude`), Windsurf, and Antigravity.
+2. Installs the global post-commit hook in `%USERPROFILE%\.git-tracker-hooks\post-commit`.
+3. Sets `git config --global core.hooksPath "$HOME/.git-tracker-hooks"`.
 
-### Step 4: Manual Windows Configuration (Alternative)
-If you configure manually, create or edit `%USERPROFILE%\.cursor\mcp.json` or `%APPDATA%\Claude\claude_desktop_config.json`:
+#### Step 4: Restart Your Editors
+Close and reopen Cursor / Claude Desktop to load the tools.
+
+---
+
+### 2.3. Linux Setup
+
+#### Step 1: Ensure Prerequisites
+```bash
+node -v
+git --version
+```
+*(If missing: `sudo apt update && sudo apt install nodejs npm git`)*.
+
+#### Step 2: Clone and Build
+> [!IMPORTANT]
+> **Avoid hidden directories**: If you use Antigravity CLI via **Snap**, Snap's AppArmor sandbox strictly blocks access to dot-folders like `~/.mcp`. Always use a visible path like `~/mcp-servers/tracker-mcp`.
+
+```bash
+mkdir -p ~/mcp-servers
+cd ~/mcp-servers
+git clone https://github.com/Carpe25/tracker-mcp.git
+cd tracker-mcp
+npm install
+npm run build
+```
+
+#### Step 3: Run Auto-Setup
+```bash
+node build/index.js setup --name "Your Full Name"
+```
+
+If you use Antigravity Snap, the setup script automatically writes the configuration to both your standard system home and your Snap common sandbox (`~/snap/antigravity-cli/common/.gemini/config/mcp_config.json`).
+
+---
+
+## 3. Upgrade Guide (For Existing Developers)
+
+If you have **already cloned** `tracker-mcp` in the past and want to update to the latest version with automatic commit logging and updated project/client sync:
+
+### Step 1: Pull Latest Changes & Rebuild
+Open terminal/PowerShell and navigate to your existing directory:
+
+**macOS / Linux:**
+```bash
+cd ~/mcp-servers/tracker-mcp
+git pull origin main
+npm install
+npm run build
+```
+
+**Windows (PowerShell):**
+```powershell
+cd "$HOME\mcp-servers\tracker-mcp"
+git pull origin main
+npm install
+npm run build
+```
+
+### Step 2: Re-run Setup or Enable the Git Hook
+You can either refresh your entire setup:
+```bash
+node build/index.js setup --name "Your Full Name"
+```
+
+Or, if you only want to install/update the **Global Git Auto-Commit Hook**:
+```bash
+node build/index.js install-hook --global
+```
+
+### Step 3: Verify the Git Hook Registration
+Run:
+```bash
+git config --global core.hooksPath
+```
+- **macOS / Linux**: It should output `/Users/yourname/.git-tracker-hooks` (or `~/.git-tracker-hooks`).
+- **Windows**: It should output `C:/Users/yourname/.git-tracker-hooks`.
+
+---
+
+## 4. Manual Editor Configuration
+
+If you prefer configuring your editor JSON files by hand rather than using the auto-setup script, use the appropriate snippet below:
+
+### Cursor Configuration
+- **macOS / Linux Path**: `~/.cursor/mcp.json` (or `~/Library/Application Support/Cursor/User/globalStorage/cursor.mcp/mcp.json`)
+- **Windows Path**: `%USERPROFILE%\.cursor\mcp.json`
 
 ```json
 {
@@ -151,196 +246,166 @@ If you configure manually, create or edit `%USERPROFILE%\.cursor\mcp.json` or `%
     "project-analytics": {
       "command": "node",
       "args": [
-        "C:/Users/YOUR_WINDOWS_USERNAME/mcp-servers/tracker-mcp/build/index.js"
+        "/Users/YOUR_USERNAME/mcp-servers/tracker-mcp/build/index.js"
       ],
       "env": {
         "TRACKER_API_URL": "https://analytics-two-ashen.vercel.app/api",
-        "DEVELOPER_NAME": "Your Name"
+        "DEVELOPER_NAME": "Your Full Name"
       }
     }
   }
 }
 ```
-> **Note on Windows Paths:** In JSON files, either use **forward slashes** (`C:/Users/...`) or **escaped double backslashes** (`C:\\Users\\...`). Single backslashes will cause JSON parse failures!
+*(On Windows, use forward slashes in path: `"C:/Users/YOUR_USERNAME/mcp-servers/tracker-mcp/build/index.js"`)*.
 
----
+### Claude Desktop Configuration
+- **macOS Path**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows Path**: `%APPDATA%\Claude\claude_desktop_config.json`
 
-## 4. Linux & Snap Sandbox Reference
+```json
+{
+  "mcpServers": {
+    "project-analytics": {
+      "command": "/usr/local/bin/node",
+      "args": [
+        "/Users/YOUR_USERNAME/mcp-servers/tracker-mcp/build/index.js"
+      ],
+      "env": {
+        "TRACKER_API_URL": "https://analytics-two-ashen.vercel.app/api",
+        "DEVELOPER_NAME": "Your Full Name"
+      }
+    }
+  }
+}
+```
+*(On Apple Silicon Macs, run `which node` and use `/opt/homebrew/bin/node`)*.
 
-If running on Ubuntu/Debian where Antigravity CLI is installed via **Snap**:
-- **Do not clone into hidden folders like `~/.mcp`**: Snap's AppArmor sandbox blocks access to dot-directories in `/home/user/` with `Permission denied`. Always use a visible folder like `~/mcp-servers/tracker-mcp`.
-- **Snap Home vs System Home**: Snap uses `/home/$USER/snap/antigravity-cli/common` as `$HOME`.
-- Global config for Antigravity Snap must be located at:
-  `/home/$USER/snap/antigravity-cli/common/.gemini/config/mcp_config.json`
+### Antigravity / Gemini CLI Configuration
+- **Standard Linux / macOS**: `~/.gemini/config/mcp_config.json`
+- **Snap Linux**: `~/snap/antigravity-cli/common/.gemini/config/mcp_config.json`
+- **Windows**: `%USERPROFILE%\.gemini\config\mcp_config.json`
+
+```json
+{
+  "mcpServers": {
+    "project-analytics": {
+      "command": "node",
+      "args": [
+        "/home/username/mcp-servers/tracker-mcp/build/index.js"
+      ],
+      "env": {
+        "TRACKER_API_URL": "https://analytics-two-ashen.vercel.app/api",
+        "DEVELOPER_NAME": "Your Full Name"
+      }
+    }
+  }
+}
+```
 
 ---
 
 ## 5. Testing & Verification
 
-### Test 1: Verify via Command Line (Stdio Test)
-Run this command from any terminal to check that the MCP server starts and responds:
+### Test 1: Verify AI Assistant MCP Tools
+1. Restart your AI editor (Cursor, Claude, or Antigravity).
+2. Open any conversation and ask:
+   > "What projects are available in the analytics tracker?"
+3. The AI will invoke `list_projects` and list all synchronized projects and clients (e.g. *Custom Portal [CP-UD]* under *Univ Diam*, *CAD Portal* under *Carpe Diem*, etc.).
+4. Test manual logging:
+   > "Log 1h on Custom Portal for Univ Diam doing testing."
+5. The AI will invoke `log_work` and return the logged entry and updated daily total.
 
-**macOS / Linux:**
-```bash
-node -e '
-const { spawn } = require("child_process");
-const p = spawn("node", ["build/index.js"], {
-  env: { ...process.env, TRACKER_API_URL: "https://analytics-two-ashen.vercel.app/api", DEVELOPER_NAME: "Test" }
-});
-p.stdout.on("data", d => { console.log("Response:", d.toString()); p.kill(); });
-p.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0.0" } } }) + "\n");
-'
-```
-
-**Windows (PowerShell):**
-```powershell
-node build/index.js
-```
-*(If it outputs `[tracker-mcp] Server running on stdio transport.` and waits for input, press `Ctrl+C` to exit. It works!)*
-
-### Test 2: In Your AI Editor (Cursor, Claude, Antigravity)
-1. **Fully restart the editor** (close and reopen).
-2. Open any project and ask:
-   > "What projects are available to log time to in the analytics tracker?"
-   
-   *or*
-   
-   > "Log 1h on Analytics for client Carpe Diem testing MCP setup."
-3. The AI should use the `log_work` tool directly and reply with the confirmed log details and updated daily total.
-
-### Test 3: Testing Automatic Git Commit / Push Logging
-1. Open any repository connected to a project in the Analytics System (e.g. `admin-portal` under `Carpe Diem`).
-2. Make any small change and commit:
+### Test 2: Verify Automatic Git Commit Logging
+1. Open any repository connected to a project on the Analytics platform.
+2. Make a small code change or test edit.
+3. Commit the change via terminal or Git GUI:
    ```bash
-   git commit -m "feat(ui): test commit auto logging"
+   git commit -m "feat(ui): test auto commit time tracking"
    ```
-3. You will immediately see the hook output in your terminal:
+4. Look at your terminal output immediately following the commit. You will see:
    ```bash
-   ✔ [Analytics] Logged 0.75h to Admin Portal (Carpe Diem) | Today's Total: 3.5h
+   ✔ [Analytics] Logged 0.5h to Custom Portal (Univ Diam) | Today's Total: 3.5h
    ```
-4. Check `http://localhost:3000` (or your live Analytics URL) — the work log and commit will appear instantly in the project and developer dashboards!
-
+5. Check your live dashboard at `https://analytics-two-ashen.vercel.app/projects` — the work log and commit will appear in your project metrics!
 
 ---
 
-## 6. Troubleshooting & Common Issues
+## 6. Troubleshooting & Common Questions
 
 <details>
-<summary><h3>Issue 1: <code>node: command not found</code> in GUI Apps</h3></summary>
+<summary><h3>Q1: My repository uses Husky, and the global commit hook doesn't run</h3></summary>
 
-#### Symptom:
-Claude Desktop or Cursor reports `Error: spawn node ENOENT` or fails to start the MCP server.
+**Cause:**
+If a specific repository has local hooks configured (or uses Husky with `git config core.hooksPath .husky`), Git's local repository config takes precedence over the global `core.hooksPath`.
 
-#### Cause:
-On macOS and Windows, GUI apps launched from desktop icons, the Dock, or Spotlight do not inherit shell environment variables defined in `.zshrc`, `.bash_profile`, or non-system paths (especially when using version managers like `nvm`, `fnm`, or `asdf`).
-
-#### Solution:
-Replace the bare `"command": "node"` with the full absolute path to the Node binary:
-
-- **macOS (Terminal):**
-  Run:
-  ```bash
-  which node
-  ```
-  - Apple Silicon Homebrew: `/opt/homebrew/bin/node`
-  - Intel Homebrew / Installer: `/usr/local/bin/node`
-  - NVM: `/Users/username/.nvm/versions/node/v20.x.x/bin/node`
-
-  Update your `mcp_config.json` / `mcp.json`:
-  ```json
-  "command": "/opt/homebrew/bin/node"
-  ```
-
-- **Windows (Command Prompt / PowerShell):**
-  Run:
-  ```cmd
-  where.exe node
-  ```
-  Example output: `C:\Program Files\nodejs\node.exe`
-
-  Update your configuration:
-  ```json
-  "command": "C:\\Program Files\\nodejs\\node.exe"
-  ```
-</details>
-
-<details>
-<summary><h3>Issue 2: Windows JSON Backslash Escaping</h3></summary>
-
-#### Symptom:
-Editor throws `SyntaxError: Unexpected token \ in JSON at position ...` when opening MCP settings.
-
-#### Cause:
-In JSON strings, a single backslash `\` is an escape character. Windows paths like `C:\Users\Jay\...` are invalid JSON.
-
-#### Solution:
-Always use forward slashes `/` (Node.js and Windows APIs natively understand forward slashes):
-```json
-"args": [
-  "C:/Users/Jay/mcp-servers/tracker-mcp/build/index.js"
-]
-```
-Or double-escape backslashes:
-```json
-"args": [
-  "C:\\Users\\Jay\\mcp-servers\\tracker-mcp\\build\\index.js"
-]
-```
-</details>
-
-<details>
-<summary><h3>Issue 3: PowerShell Execution Policy Restrictions</h3></summary>
-
-#### Symptom:
-On Windows PowerShell, running `npm run build` or `npx` produces:
-`File ... cannot be loaded because running scripts is disabled on this system.`
-
-#### Solution:
-Open PowerShell as Current User and allow signed local scripts:
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-```
-Or for the current session only:
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-</details>
-
-<details>
-<summary><h3>Issue 4: AI Assistant Does Not Detect New Tools</h3></summary>
-
-#### Symptom:
-You updated the config file, but asking the AI to log work still uses bash or says no tool is found.
-
-#### Solution:
-AI editors only load MCP configurations on startup or explicit window reload:
-1. **Cursor**: Press `Ctrl + Shift + P` (Windows) or `Cmd + Shift + P` (macOS), type `Developer: Reload Window`, and hit Enter.
-2. **Claude Desktop**: Completely quit Claude (`Cmd + Q` on macOS, or right-click tray icon > Quit on Windows), then restart it.
-3. **Antigravity CLI**: Exit the active `agy` session (`Ctrl + C` or type `exit`), then launch `agy` again.
-4. **Check logs**:
-   - In Cursor: Go to `Output` tab at the bottom and select `Cursor MCP` or `context-servers` from the dropdown to see any startup errors.
-</details>
-
-<details>
-<summary><h3>Issue 5: API Connection or VPN Issues</h3></summary>
-
-#### Symptom:
-MCP tool is invoked, but returns `Failed to fetch` or `Network timeout`.
-
-#### Solution:
-1. Test network access to the API endpoint:
+**Solution:**
+You can either:
+1. **Option A (Install hook directly in this repo)**:
+   Navigate to the repository and run:
    ```bash
-   curl -I https://analytics-two-ashen.vercel.app/api/projects
+   node /path/to/tracker-mcp/build/index.js install-hook
    ```
-   Should return `HTTP/2 200`.
-2. If working through a corporate proxy or VPN (like ProtonVPN, Zscaler, Cisco AnyConnect), verify that outgoing HTTPS requests to `*.vercel.app` are not blocked.
+   *(Without the `--global` flag, it installs directly into `.git/hooks/post-commit`)*.
+
+2. **Option B (Husky integration)**:
+   If the repo uses Husky, add this single line at the end of `.husky/post-commit` (or `.husky/pre-push`):
+   ```bash
+   node /path/to/tracker-mcp/build/index.js git-hook post-commit
+   ```
 </details>
 
 <details>
-<summary><h3>Issue 6: Developer Name & Client Name Matching</h3></summary>
+<summary><h3>Q2: <code>node: command not found</code> in Claude Desktop or Cursor</h3></summary>
 
-#### How Name Resolution Works:
-- **Developer Name**: Configured via `DEVELOPER_NAME` environment variable in the config. The API matches names case-insensitively (e.g. `Jay` matches `jay` or `dev-jay`).
-- **Client Name**: The MCP server features built-in fuzzy matching. If you type `"Carpe Diam"` or `"carpediem"`, it automatically normalizes and matches to `"Carpe Diem"`.
-- **Category Resolution**: If you say "fixing bug", it maps to category `"Bugs/Fix"`; if you say "testing", it maps to `"Testing"`; "meetings" maps to `"Meeting"`, etc.
+**Cause:**
+On macOS and Windows, GUI apps launched from desktop shortcuts or Spotlight do not inherit shell paths set in `.zshrc` or `.bashrc` (especially when using version managers like `nvm` or `fnm`).
+
+**Solution:**
+Replace `"command": "node"` with the full absolute path to your Node.js binary:
+- **macOS (Homebrew Apple Silicon)**: `/opt/homebrew/bin/node`
+- **macOS (Homebrew Intel)**: `/usr/local/bin/node`
+- **Windows**: `C:\\Program Files\\nodejs\\node.exe` (run `where.exe node` in cmd to find your path).
+</details>
+
+<details>
+<summary><h3>Q3: Windows JSON "Unexpected token \" error</h3></summary>
+
+**Cause:**
+Single backslashes `\` in Windows paths are escape characters in JSON.
+
+**Solution:**
+Always use **forward slashes** `/` in JSON config paths:
+```json
+"args": ["C:/Users/YourName/mcp-servers/tracker-mcp/build/index.js"]
+```
+*(Node.js and Windows natively support forward slashes in file paths)*.
+</details>
+
+<details>
+<summary><h3>Q4: How does the commit auto-logger know which project and client to log to?</h3></summary>
+
+**Resolution Priority:**
+1. **GitHub Remote Match**: The hook extracts `owner/repo` from `git remote get-url origin` and matches it against the repository configured in the Analytics System (under **Projects** → **Connect Repo**).
+2. **Project Code & Name Match**: If no remote is configured, it inspects the folder name or project code.
+3. **Commit Convention Categorization**: Commit prefixes are automatically mapped:
+   - `feat: ...` → *Frontend* / *Backend* / *New Feature*
+   - `fix: ...` / `bug: ...` → *Bug Fix*
+   - `docs: ...` → *Documentation*
+   - `test: ...` → *Testing*
+   - `refactor: ...` / `perf: ...` → *Improvement*
+</details>
+
+<details>
+<summary><h3>Q5: How is time calculated between commits?</h3></summary>
+
+**Smart Time Elapsed Calculation:**
+- The hook checks the timestamp of your current commit and compares it to your previous commit in that repository.
+- If commits are within standard working intervals (e.g. 45 minutes apart), it logs the exact elapsed time (rounded to 15-minute increments).
+- If this is your first commit of the day or there is a large multi-day gap, it assigns a sensible default work block (e.g., 0.5h to 1.0h) to prevent logging overnight inactive hours.
+</details>
+
+<details>
+<summary><h3>Q6: Will a failed Git hook block my commit?</h3></summary>
+
+**No.** The Git hook is designed to be completely non-blocking. If your network is offline, the API is unreachable, or a project is not recognized, Git will display a gentle terminal warning, but your `git commit` or `git push` will **never be halted or failed**.
 </details>
