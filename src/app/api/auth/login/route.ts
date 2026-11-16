@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyCredentials, encodeUserSession, AUTH_COOKIE_NAME } from "@/lib/auth/users";
+import { verifyCredentials, createSignedSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth/users";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    const token = encodeUserSession(user);
+    // Generate tamper-proof HMAC-SHA256 signed session token
+    const token = await createSignedSessionToken(user);
 
     const res = NextResponse.json({
       success: true,

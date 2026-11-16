@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readTickets } from "@/lib/tickets/ticket-service";
-import { AUTH_COOKIE_NAME, decodeUserSession } from "@/lib/auth/users";
+import { getRequestAuth } from "@/lib/auth/guard";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
-  const user = token ? decodeUserSession(token) : null;
-
-  if (!user) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated || !auth.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { user } = auth;
   const allTickets = await readTickets();
 
   // If Manager, return all tickets

@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runSync } from "@/lib/sync/orchestrator";
 import { getAppEnv } from "@/lib/config/env";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
 
 export async function POST(req: NextRequest) {
+  const auth = await getRequestAuth(req);
   const env = getAppEnv();
 
-  // If manual sync secret is configured, require it
-  if (env.manualSyncSecret) {
-    const authHeader = req.headers.get("authorization");
-    const secretProvided = authHeader?.replace(/^Bearer\s+/i, "") || req.headers.get("x-sync-secret");
-    if (secretProvided !== env.manualSyncSecret) {
-      return NextResponse.json({ error: "Unauthorized: Invalid sync secret" }, { status: 401 });
-    }
+  // Validate authorization
+  const authHeader = req.headers.get("authorization");
+  const secretProvided = authHeader?.replace(/^Bearer\s+/i, "") || req.headers.get("x-sync-secret");
+  const hasSyncSecret = Boolean(env.manualSyncSecret && secretProvided === env.manualSyncSecret);
+
+  if (!hasSyncSecret && !isManager(auth)) {
+    return NextResponse.json(
+      { error: "Forbidden: Only Managers or authorized sync callers can trigger manual synchronization." },
+      { status: 403 }
+    );
   }
 
   try {

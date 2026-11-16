@@ -44,4 +44,5 @@ next-env.d.ts
 
 # Artifacts & local cache
 .artifacts/
+.test-artifacts*
 temp/

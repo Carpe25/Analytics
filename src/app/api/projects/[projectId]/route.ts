@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { resolveProjectClient, canonicalClient, isSameClient } from "@/lib/config/defaults";
 import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { projectId: string } }
 ) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { projectId } = params;
   const storage = getArtifactStorage();
   const snapshot = await storage.readLatestAnalytics();
@@ -98,9 +104,21 @@ export async function GET(
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 
+  // Enforce developer account isolation
+  let visibleProjectLogs = projectLogs;
+  let visibleProjectCommits = projectCommits;
+  if (!isManager(auth) && auth.user) {
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings?.developerGithubMapping);
+    visibleProjectLogs = projectLogs.filter((l) => l.developerId === authCanon.id);
+    visibleProjectCommits = projectCommits.filter(
+      (c) => resolveCanonicalDeveloper(c.authorName || c.authorLogin, settings?.developerGithubMapping).id === authCanon.id
+    );
+  }
+
   // Developer breakdown with canonical identities
   const devMinutes: Record<string, { id: string; name: string; minutes: number; count: number }> = {};
-  for (const log of projectLogs) {
+  for (const log of visibleProjectLogs) {
     if (!devMinutes[log.developerId]) {
       devMinutes[log.developerId] = {
         id: log.developerId,
@@ -115,7 +133,7 @@ export async function GET(
 
   // Category breakdown
   const catMinutes: Record<string, { category: string; minutes: number; count: number }> = {};
-  for (const log of projectLogs) {
+  for (const log of visibleProjectLogs) {
     if (!catMinutes[log.category]) {
       catMinutes[log.category] = { category: log.category, minutes: 0, count: 0 };
     }
@@ -125,7 +143,7 @@ export async function GET(
 
   // Developer x Category matrix
   const devCategoryMatrix: Record<string, Record<string, number>> = {};
-  for (const log of projectLogs) {
+  for (const log of visibleProjectLogs) {
     if (!devCategoryMatrix[log.developerName]) {
       devCategoryMatrix[log.developerName] = {};
     }
@@ -144,8 +162,8 @@ export async function GET(
         : (project.connectedRepos || []),
     },
     config,
-    workLogs: projectLogs,
-    commits: projectCommits,
+    workLogs: visibleProjectLogs,
+    commits: visibleProjectCommits,
     developerBreakdown: Object.values(devMinutes).map((d) => ({
       ...d,
       hours: Number((d.minutes / 60).toFixed(1)),

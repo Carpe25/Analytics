@@ -4,20 +4,23 @@ import {
   assignTicket,
   unassignTicket,
   resolveTicket,
+  readTickets,
 } from "@/lib/tickets/ticket-service";
-import { AUTH_COOKIE_NAME, decodeUserSession } from "@/lib/auth/users";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
+
+export const dynamic = "force-dynamic";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ ticketId: string }> }
 ) {
-  const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
-  const user = token ? decodeUserSession(token) : null;
-
-  if (!user) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated || !auth.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const user = auth.user;
   const resolvedParams = await params;
   const { ticketId } = resolvedParams;
 
@@ -25,7 +28,7 @@ export async function PATCH(
     const { action } = await req.json();
 
     if (action === "make_live") {
-      if (user.role !== "manager") {
+      if (!isManager(auth)) {
         return NextResponse.json({ error: "Only managers can review and make tickets live" }, { status: 403 });
       }
 
@@ -38,6 +41,19 @@ export async function PATCH(
     }
 
     if (action === "assign_to_me") {
+      const tickets = await readTickets();
+      const existing = tickets.find((t) => t.id === ticketId);
+      if (!existing) {
+        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      }
+
+      if (existing.status !== "open" && !isManager(auth)) {
+        return NextResponse.json(
+          { error: "Cannot assign ticket: Ticket is not open or already assigned/resolved." },
+          { status: 400 }
+        );
+      }
+
       const devId = user.developerId || `dev-${user.username.toLowerCase()}`;
       const devName = user.name;
 
@@ -50,20 +66,50 @@ export async function PATCH(
     }
 
     if (action === "unassign") {
-      const updated = await unassignTicket(ticketId);
-      if (!updated) {
+      const tickets = await readTickets();
+      const existing = tickets.find((t) => t.id === ticketId);
+      if (!existing) {
         return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
       }
 
+      if (!isManager(auth)) {
+        const myDevId = user.developerId || `dev-${user.username.toLowerCase()}`;
+        const myCanon = resolveCanonicalDeveloper(myDevId).id;
+        const assignedTarget = existing.assignedToDeveloperId || existing.assignedToDeveloperName;
+        const assignedCanon = assignedTarget ? resolveCanonicalDeveloper(assignedTarget).id : null;
+        if (assignedCanon !== myCanon) {
+          return NextResponse.json(
+            { error: "Forbidden: You cannot unassign a ticket assigned to another developer." },
+            { status: 403 }
+          );
+        }
+      }
+
+      const updated = await unassignTicket(ticketId);
       return NextResponse.json({ success: true, ticket: updated });
     }
 
     if (action === "resolve") {
-      const updated = await resolveTicket(ticketId);
-      if (!updated) {
+      const tickets = await readTickets();
+      const existing = tickets.find((t) => t.id === ticketId);
+      if (!existing) {
         return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
       }
 
+      if (!isManager(auth)) {
+        const myDevId = user.developerId || `dev-${user.username.toLowerCase()}`;
+        const myCanon = resolveCanonicalDeveloper(myDevId).id;
+        const assignedTarget = existing.assignedToDeveloperId || existing.assignedToDeveloperName;
+        const assignedCanon = assignedTarget ? resolveCanonicalDeveloper(assignedTarget).id : null;
+        if (assignedCanon !== myCanon) {
+          return NextResponse.json(
+            { error: "Forbidden: You cannot resolve a ticket assigned to another developer." },
+            { status: 403 }
+          );
+        }
+      }
+
+      const updated = await resolveTicket(ticketId);
       return NextResponse.json({ success: true, ticket: updated });
     }
 

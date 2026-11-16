@@ -210,3 +210,26 @@ export interface AuthUser {
   role: UserRole;
   developerId?: string;
 }
+
+export interface ActiveSession {
+  developerId: string;
+  developerName: string;
+  startedAtUtc: string;      // Immutable server timestamp when agentic work or session began
+  lastHeartbeatUtc: string;  // Last verified active agent interaction or heartbeat
+  project?: string;
+  client?: string;
+  category?: string;
+  taskTicketId?: string;
+  source?: string;           // "mcp" | "agent" | "git" | "ide"
+}
+
+export interface DaySlice {
+  date: string;              // YYYY-MM-DD in local timezone
+  durationMinutes: number;
+  hours: number;
+  startTimeUtc: string;
+  endTimeUtc: string;
+  partIndex: number;
+  totalParts: number;
+}
+

@@ -34,6 +34,29 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const pathname = usePathname();
   const syncStatus = useSyncStatus();
+  const [currentUser, setCurrentUser] = useState<{ username: string; name: string; role: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.authenticated && data?.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (currentUser?.role === "manager") return true;
+    // Hide manager-only settings and sync history for developers
+    return item.href !== "/settings" && item.href !== "/sync-history";
+  }).map((item) => {
+    if (item.href === "/developers" && currentUser?.role === "developer") {
+      return { ...item, label: "My Profile" };
+    }
+    return item;
+  });
 
   return (
     <aside className="w-64 border-r border-[#17212B]/15 bg-[#F5F7F8] flex flex-col justify-between shrink-0 min-h-screen">
@@ -54,7 +77,7 @@ export function Sidebar() {
 
         {/* Navigation Items */}
         <nav className="p-3 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               item.href === "/"
@@ -102,6 +125,15 @@ export function Sidebar() {
             <span>{syncStatus.status || "Checking..."}</span>
           </div>
         </div>
+
+        {currentUser && (
+          <div className="mt-2.5 pt-2 border-t border-[#17212B]/10 flex items-center justify-between text-[10px]">
+            <span className="font-semibold text-[#17212B] truncate max-w-[110px]">{currentUser.name}</span>
+            <span className="capitalize px-1.5 py-0.5 rounded-full bg-[#17212B]/5 text-[#17212B]/70 font-mono text-[9px]">
+              {currentUser.role}
+            </span>
+          </div>
+        )}
 
         <button
           onClick={async () => {

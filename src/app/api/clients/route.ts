@@ -1,8 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { Client } from "@/types";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const storage = getArtifactStorage();
     const clients = await storage.readClients();
@@ -16,9 +22,22 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Only Managers or authorized API key can create clients
+  if (!isManager(auth)) {
+    return NextResponse.json(
+      { error: "Forbidden: Only Managers can create new clients." },
+      { status: 403 }
+    );
+  }
+
   try {
-    const body = await request.json();
+    const body = await req.json();
     const name = (body.name || "").trim();
     const code = (body.code || "").trim().toUpperCase();
     const description = (body.description || "").trim();
@@ -49,10 +68,9 @@ export async function POST(request: Request) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
-    const id = `client-${slug || Date.now()}`;
 
     const newClient: Client = {
-      id,
+      id: `client-${slug}-${Date.now().toString(36)}`,
       name,
       code: code || undefined,
       description: description || undefined,
@@ -62,10 +80,10 @@ export async function POST(request: Request) {
 
     await storage.saveClient(newClient);
 
-    return NextResponse.json({
-      success: true,
-      client: newClient,
-    });
+    return NextResponse.json(
+      { success: true, client: newClient },
+      { status: 201 }
+    );
   } catch (err: any) {
     console.error("Failed to create client:", err);
     return NextResponse.json(

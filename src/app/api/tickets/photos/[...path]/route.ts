@@ -44,6 +44,8 @@ export async function GET(
           return new NextResponse(bytes, {
             headers: {
               "Content-Type": contentType,
+              "X-Content-Type-Options": "nosniff",
+              "Content-Security-Policy": "default-src 'none'",
               "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
             },
           });
@@ -53,9 +55,15 @@ export async function GET(
       }
     }
 
-    // Local disk fallback
+    // Local disk fallback: strictly confined to .artifacts/tickets/photos/
+    const basePhotosDir = path.resolve(process.cwd(), ".artifacts", "tickets", "photos");
     const safeRelPath = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, "");
     const fullPath = path.resolve(process.cwd(), ".artifacts", safeRelPath);
+
+    const relativeToPhotos = path.relative(basePhotosDir, fullPath);
+    if (relativeToPhotos.startsWith("..") || path.isAbsolute(relativeToPhotos)) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
 
     const data = await fs.readFile(fullPath);
     const ext = path.extname(fullPath).toLowerCase();
@@ -72,6 +80,8 @@ export async function GET(
     return new NextResponse(data, {
       headers: {
         "Content-Type": contentType,
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'",
         "Cache-Control": "public, max-age=86400",
       },
     });

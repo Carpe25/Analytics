@@ -70,7 +70,7 @@ function formatDefaultName(str: string): string {
  */
 export function resolveCanonicalDeveloper(
   rawIdentifier: string | undefined | null,
-  customMapping?: Record<string, string[]>
+  customMapping?: Record<string, string[] | string>
 ): { id: string; name: string } {
   if (!rawIdentifier) {
     return { id: "dev-unknown", name: "Unknown" };
@@ -83,7 +83,7 @@ export function resolveCanonicalDeveloper(
 
   // 1. Check custom settings developerGithubMapping first
   if (customMapping) {
-    for (const [devId, handles] of Object.entries(customMapping)) {
+    for (const [devId, rawHandles] of Object.entries(customMapping)) {
       const devIdLower = devId.toLowerCase();
       const devIdStripped = devIdLower.replace(/^dev-/, "");
       if (
@@ -96,7 +96,9 @@ export function resolveCanonicalDeveloper(
           name: KNOWN_CANONICAL_DEVELOPERS[devId]?.name || formatDefaultName(devIdStripped),
         };
       }
+      const handles = Array.isArray(rawHandles) ? rawHandles : [rawHandles];
       for (const h of handles) {
+        if (!h || typeof h !== "string") continue;
         const hLower = h.toLowerCase().trim();
         const hStripped = hLower.replace(/^dev-/, "");
         if (

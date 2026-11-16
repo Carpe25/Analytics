@@ -8,6 +8,8 @@ import { AnalyticsSnapshot, GitHubCommit, WorkLog } from "@/types";
 import { resolveCategory, resolveProject, resolveProjectByGitHubRepo, normalizeClientName } from "@/lib/mcp/resolution";
 import { formatDateTimeInTimezone } from "@/lib/utils";
 import { getAppEnv } from "@/lib/config/env";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 
 const CommitWorkLogInputSchema = z.object({
   repoOwner: z.string().optional(),
@@ -30,19 +32,6 @@ const CommitWorkLogInputSchema = z.object({
   defaultSessionMinutes: z.number().optional().default(45),
   maxGapMinutes: z.number().optional().default(240), // 4 hours
 });
-
-function checkApiKey(req: NextRequest): boolean {
-  const expectedKey = process.env.TRACKER_API_KEY;
-  if (!expectedKey || !expectedKey.trim()) {
-    return true;
-  }
-
-  const authHeader = req.headers.get("authorization");
-  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-  const customHeader = req.headers.get("x-api-key")?.trim();
-
-  return bearerToken === expectedKey || customHeader === expectedKey;
-}
 
 function formatDateInTimezone(d: Date, tz: string = "Asia/Kolkata"): string {
   try {
@@ -87,8 +76,12 @@ function inferCategoryFromCommitMessage(msg: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!checkApiKey(req)) {
-      return NextResponse.json({ error: "Unauthorized: Invalid or missing API key" }, { status: 401 });
+    const auth = await getRequestAuth(req);
+    if (!auth.isAuthenticated) {
+      return NextResponse.json(
+        { error: "Unauthorized: Missing valid session token or API key" },
+        { status: 401 }
+      );
     }
 
   let body: unknown;
@@ -137,6 +130,20 @@ export async function POST(req: NextRequest) {
   };
 
   const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
+
+  // Enforce developer account isolation
+  if (!isManager(auth) && auth.user) {
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings.developerGithubMapping);
+    const authorCanon = resolveCanonicalDeveloper(data.authorName, settings.developerGithubMapping);
+
+    if (authCanon.id !== authorCanon.id) {
+      return NextResponse.json(
+        { error: "Forbidden: You cannot log commits on behalf of another developer." },
+        { status: 403 }
+      );
+    }
+  }
 
   // 1. Parse repository coordinates
   let repoOwner = (data.repoOwner || "").trim();
@@ -207,12 +214,10 @@ export async function POST(req: NextRequest) {
 
     // Fallback: check in-memory snapshot commits
     if (!prevMs && snapshot.githubCommits && snapshot.githubCommits.length > 0) {
-      const lowerName = data.authorName.toLowerCase();
-      const lowerEmail = (data.authorEmail || "").toLowerCase();
+      const myCanon = resolveCanonicalDeveloper(data.authorName, settings.developerGithubMapping);
       const matched = snapshot.githubCommits.filter((c) => {
-        const cName = (c.authorName || "").toLowerCase();
-        const cEmail = (c.authorEmail || "").toLowerCase();
-        return (cName && cName === lowerName) || (lowerEmail && cEmail === lowerEmail);
+        const cCanon = resolveCanonicalDeveloper(c.authorLogin || c.authorName, settings.developerGithubMapping);
+        return cCanon.id === myCanon.id;
       });
       if (matched.length > 0) {
         matched.sort((a, b) => new Date(b.commitDateUtc).getTime() - new Date(a.commitDateUtc).getTime());
@@ -221,26 +226,51 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Duration computation with explicit override and intelligent workday windowing
+  // Duration computation with dual-tracking:
+  // 1. durationMinutes: The final billable/reported minutes (subject to policy caps & validation)
+  // 2. realElapsedMinutes: The exact physical git delta between commits
+  // 3. claimedMinutes: What the developer requested in [time: X]
   let durationMinutes = data.defaultSessionMinutes;
   let calculationRule = "default_session";
   let rawDeltaMinutes: number | null = null;
 
-  if (explicitTag) {
-    // Priority 1: Developer explicitly marked the duration in commit: [4.5h], [5h], [90m]
-    durationMinutes = explicitTag.durationMinutes;
-    calculationRule = "explicit_commit_tag";
-  } else if (prevMs && currMs > prevMs) {
+  if (prevMs && currMs > prevMs) {
     rawDeltaMinutes = Math.round((currMs - prevMs) / (60 * 1000));
+  }
 
-    // Check if the previous commit happened on the same calendar day in developer's timezone
-    const currDay = formatDateInTimezone(new Date(currMs), env.appTimezone);
-    const prevDay = formatDateInTimezone(new Date(prevMs), env.appTimezone);
-    const isSameDay = currDay === prevDay;
+  // Check if previous commit occurred on same calendar day in developer's timezone
+  const currDay = formatDateInTimezone(new Date(currMs), env.appTimezone);
+  const prevDay = prevMs ? formatDateInTimezone(new Date(prevMs), env.appTimezone) : null;
+  const isSameDay = Boolean(prevDay && currDay === prevDay);
 
-    // Same-day threshold expands up to 480 minutes (8 hours)
-    // Multi-day/overnight threshold uses maxGapMinutes (default 240m / 4h)
-    const effectiveMaxGap = isSameDay ? 480 : data.maxGapMinutes;
+  // Maximum single-commit work ceiling (prevents accidental or fraudulent 10h/20h claims in a single commit)
+  const MAX_SINGLE_COMMIT_CLAIM_MINUTES = 360; // 6 hours absolute max per commit
+  const MAX_SAME_DAY_DELTA_MINUTES = 480; // 8 hours max delta within same day
+
+  if (explicitTag) {
+    // Developer claimed an explicit tag: e.g. [10h], [5h], [90m]
+    let effectiveClaimed = explicitTag.durationMinutes;
+    let clampedDueToMax = false;
+
+    if (effectiveClaimed > MAX_SINGLE_COMMIT_CLAIM_MINUTES) {
+      effectiveClaimed = MAX_SINGLE_COMMIT_CLAIM_MINUTES;
+      clampedDueToMax = true;
+    }
+
+    if (rawDeltaMinutes !== null && rawDeltaMinutes < 15 && effectiveClaimed > 120) {
+      // Suspicious: Developer made a commit 5 minutes after previous one but claimed large hours
+      // Apply rapid commit cap after absolute ceiling
+      durationMinutes = Math.min(effectiveClaimed, 60);
+      calculationRule = "claimed_tag_rapid_commit_capped_60m";
+    } else if (clampedDueToMax) {
+      durationMinutes = MAX_SINGLE_COMMIT_CLAIM_MINUTES;
+      calculationRule = `claimed_tag_clamped_max_${MAX_SINGLE_COMMIT_CLAIM_MINUTES}m`;
+    } else {
+      durationMinutes = effectiveClaimed;
+      calculationRule = "explicit_commit_tag";
+    }
+  } else if (rawDeltaMinutes !== null) {
+    const effectiveMaxGap = isSameDay ? MAX_SAME_DAY_DELTA_MINUTES : data.maxGapMinutes;
 
     if (rawDeltaMinutes <= 0) {
       durationMinutes = data.minDurationMinutes;
@@ -249,7 +279,7 @@ export async function POST(req: NextRequest) {
       durationMinutes = data.minDurationMinutes;
       calculationRule = "minimum_floor_micro_commit";
     } else if (rawDeltaMinutes > effectiveMaxGap) {
-      // Overnight or very long idle gap between days: default session applies
+      // Overnight or very long idle gap: default session applies
       durationMinutes = data.defaultSessionMinutes;
       calculationRule = `clamped_gap_exceeded_${effectiveMaxGap}m`;
     } else {
@@ -284,8 +314,18 @@ export async function POST(req: NextRequest) {
   }
 
   const shortSha = data.shortSha || data.commitSha.slice(0, 7);
-  const developerName = data.authorName.trim();
-  const developerId = `dev-${developerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+  let developerName = data.authorName.trim();
+  let developerId = `dev-${developerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+  if (!isManager(auth) && auth.user) {
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings.developerGithubMapping);
+    developerId = authCanon.id;
+    developerName = auth.user.name || authCanon.name;
+  } else {
+    const canon = resolveCanonicalDeveloper(developerName, settings.developerGithubMapping);
+    developerId = canon.id;
+  }
 
   // 7. Create WorkLog
   const logId = `log-git-${Date.now()}-${shortSha}`;
@@ -330,6 +370,23 @@ export async function POST(req: NextRequest) {
   };
 
   // 9. Update snapshot and recompute analytics
+  // IDOR Protection: Prevent non-manager from overwriting a commit owned by another developer
+  const existingMatchingCommit = (snapshot.githubCommits || []).find(
+    (c) => c.repoFullName === fullRepoName && c.sha === data.commitSha
+  );
+  if (existingMatchingCommit && !isManager(auth)) {
+    const existingOwnerCanon = resolveCanonicalDeveloper(
+      existingMatchingCommit.authorLogin || existingMatchingCommit.authorName,
+      settings.developerGithubMapping
+    );
+    if (existingOwnerCanon.id !== developerId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot overwrite a commit that belongs to another developer." },
+        { status: 403 }
+      );
+    }
+  }
+
   const updatedWorkLogs = [newLog, ...(snapshot.workLogs || [])];
   
   // Deduplicate commits by repoFullName:sha

@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 
 export async function GET(req: NextRequest) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month");
   const startDate = searchParams.get("startDate");
@@ -59,8 +65,17 @@ export async function GET(req: NextRequest) {
     }).catch((err) => console.warn("Could not heal unmerged developers in snapshot:", err));
   }
 
+  let developers = agg.developers;
+  if (!isManager(auth)) {
+    const authDevIdentifier = auth.user?.developerId || auth.user?.username || "";
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings.developerGithubMapping);
+    developers = agg.developers.filter(
+      (d) => resolveCanonicalDeveloper(d.id, settings.developerGithubMapping).id === authCanon.id
+    );
+  }
+
   return NextResponse.json({
-    developers: agg.developers,
+    developers,
     availableMonths,
     month,
     startDate,

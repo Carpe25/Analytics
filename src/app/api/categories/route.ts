@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
+import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 
 export async function GET(req: NextRequest) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month");
   const startDate = searchParams.get("startDate");
@@ -15,9 +21,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ categories: [], availableMonths: [] });
   }
 
-  // Derive unique available months
+  const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
+
+  // Enforce account isolation: scope to requesting developer if not manager
+  let accessibleLogs = [...snapshot.workLogs];
+  const isDevUser = !isManager(auth);
+  if (isDevUser && auth.user) {
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanonId = resolveCanonicalDeveloper(authDevIdentifier, settings.developerGithubMapping).id;
+    accessibleLogs = accessibleLogs.filter(
+      (l) => resolveCanonicalDeveloper(l.developerId || l.developerName, settings.developerGithubMapping).id === authCanonId
+    );
+  }
+
+  // Derive unique available months for accessible logs
   const monthSet = new Set<string>();
-  for (const l of snapshot.workLogs) {
+  for (const l of accessibleLogs) {
     if (l.date && l.date.length >= 7) {
       monthSet.add(l.date.slice(0, 7));
     }
@@ -26,15 +45,8 @@ export async function GET(req: NextRequest) {
 
   const hasFilter = (month && month !== "all") || !!startDate || !!endDate;
 
-  if (!hasFilter) {
-    return NextResponse.json({
-      categories: snapshot.categories,
-      availableMonths,
-    });
-  }
-
   // Filter logs by date range or month
-  let filteredLogs = [...snapshot.workLogs];
+  let filteredLogs = accessibleLogs;
   if (startDate) {
     filteredLogs = filteredLogs.filter((l) => l.date >= startDate);
   }
@@ -45,7 +57,12 @@ export async function GET(req: NextRequest) {
     filteredLogs = filteredLogs.filter((l) => l.date.startsWith(month));
   }
 
-  const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
+  if (!hasFilter && !isDevUser) {
+    return NextResponse.json({
+      categories: snapshot.categories,
+      availableMonths,
+    });
+  }
 
   const agg = computeAnalytics(
     filteredLogs,

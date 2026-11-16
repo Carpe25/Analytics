@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { ProjectService } from "@/lib/projects/project-service";
 import { LocalArtifactStorage } from "@/lib/storage/local-adapter";
 import { IntegrationSettings, AnalyticsSnapshot } from "@/types";
@@ -199,5 +199,11 @@ describe("ProjectService Domain Isolation", () => {
     expect(carpeProj?.githubRepos).toEqual([
       { owner: "Carpe25", repo: "custom-cd", defaultBranch: "main" },
     ]);
+  });
+
+  afterAll(() => {
+    if (fs.existsSync(testDir)) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
   });
 });

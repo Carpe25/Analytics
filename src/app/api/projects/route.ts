@@ -4,8 +4,13 @@ import { computeAnalytics } from "@/lib/analytics/aggregate";
 import { DEFAULT_INTEGRATION_SETTINGS, resolveProjectClient, canonicalClient, isSameClient } from "@/lib/config/defaults";
 import { WorkLog, ProjectConfig, ProjectSummary } from "@/types";
 import { computeClientBreakdown } from "@/lib/projects/client-breakdown";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
 
 export async function GET(req: NextRequest) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month");
   const startDate = searchParams.get("startDate");
@@ -93,9 +98,21 @@ export async function GET(req: NextRequest) {
   });
 }
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isManager(auth)) {
+    return NextResponse.json(
+      { error: "Forbidden: Only Managers can create new projects." },
+      { status: 403 }
+    );
+  }
+
   try {
-    const body = await request.json();
+    const body = await req.json();
     const name = (body.name || "").trim();
     const code = (body.code || "").trim().toUpperCase();
     let clientName = (body.client || "").trim();

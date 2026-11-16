@@ -12,6 +12,8 @@ import {
   FileText,
   Calendar,
   Loader2,
+  AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Input } from "@/components/ui/input";
@@ -35,6 +37,7 @@ interface DeveloperDetailState {
 import { formatMonthName } from "@/lib/utils";
 
 export default function DevelopersPage() {
+  const [currentUser, setCurrentUser] = useState<{ username: string; name: string; role: string; developerId?: string } | null>(null);
   const [developers, setDevelopers] = useState<DeveloperSummary[]>([]);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
@@ -42,11 +45,23 @@ export default function DevelopersPage() {
   const [endDate, setEndDate] = useState<string>("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Expanded developer detail state
   const [expandedDevId, setExpandedDevId] = useState<string | null>(null);
   const [devDetails, setDevDetails] = useState<Record<string, DeveloperDetailState>>({});
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.authenticated && data?.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const loadDevelopers = useCallback(() => {
     setLoading(true);
@@ -64,14 +79,21 @@ export default function DevelopersPage() {
     fetch(`/api/developers?${query.toString()}`)
       .then((res) => res.json())
       .then((data) => {
-        setDevelopers(data?.developers || []);
+        const devs = data?.developers || [];
+        setDevelopers(devs);
         if (data?.availableMonths) {
           setAvailableMonths(data.availableMonths);
+        }
+        // If developer account with single developer view, auto-expand their profile
+        if (devs.length === 1 && !expandedDevId) {
+          const devId = devs[0].id;
+          setExpandedDevId(devId);
+          fetchDeveloperDetail(devId, selectedMonth, startDate, endDate);
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [selectedMonth, startDate, endDate]);
+  }, [selectedMonth, startDate, endDate, expandedDevId]);
 
   useEffect(() => {
     loadDevelopers();
@@ -79,6 +101,7 @@ export default function DevelopersPage() {
 
   const fetchDeveloperDetail = async (devId: string, month: string, start = startDate, end = endDate) => {
     setLoadingDetail(devId);
+    setAuthError(null);
     try {
       const query = new URLSearchParams();
       if (month && month !== "all") query.set("month", month);
@@ -87,7 +110,9 @@ export default function DevelopersPage() {
       const queryString = query.toString() ? `?${query.toString()}` : "";
       const res = await fetch(`/api/developers/${devId}${queryString}`);
       const data = await res.json();
-      if (!data.error) {
+      if (res.status === 403 || data.error) {
+        setAuthError(data.error || "Access Denied: You cannot access another developer's account.");
+      } else {
         setDevDetails((prev) => ({ ...prev, [devId]: data }));
       }
     } catch (err) {
@@ -161,6 +186,27 @@ export default function DevelopersPage() {
       />
 
       <div className="w-full max-w-none px-8 py-6 space-y-8 font-sans">
+        {authError && (
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{authError}</span>
+          </div>
+        )}
+
+        {currentUser?.role === "developer" && (
+          <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200/60 text-xs text-blue-900 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0" />
+              <span>
+                Personal Workspace: <strong>{currentUser.name}</strong>. Developer accounts are isolated; other developer records and timesheets cannot be accessed.
+              </span>
+            </div>
+            <Badge variant="outline" className="text-[10px] bg-white border-blue-200 text-blue-700">
+              Developer Scoped
+            </Badge>
+          </div>
+        )}
+
         {/* Controls Bar: Flat, airy layout without boxy containers */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#17212B]/15">
           <div className="flex flex-wrap items-center gap-3">
@@ -208,16 +254,18 @@ export default function DevelopersPage() {
               />
             </div>
 
-            {/* Search */}
-            <div className="relative w-56">
-              <Search className="absolute left-3.5 top-2.5 h-3.5 w-3.5 text-[#17212B]/40" />
-              <Input
-                placeholder="Search developer..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-8 text-xs rounded-full bg-white border-[#17212B]/20"
-              />
-            </div>
+            {/* Search (Managers only) */}
+            {currentUser?.role === "manager" && (
+              <div className="relative w-56">
+                <Search className="absolute left-3.5 top-2.5 h-3.5 w-3.5 text-[#17212B]/40" />
+                <Input
+                  placeholder="Search developer..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-8 text-xs rounded-full bg-white border-[#17212B]/20"
+                />
+              </div>
+            )}
 
             {/* Reset Button */}
             <Button

@@ -1,8 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { checkConfigurationStatus } from "@/lib/config/env";
 import { getArtifactStorage } from "@/lib/storage/provider";
+import { getRequestAuth } from "@/lib/auth/guard";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const status = checkConfigurationStatus();
   const storage = getArtifactStorage();
   const settings = await storage.readIntegrationSettings();

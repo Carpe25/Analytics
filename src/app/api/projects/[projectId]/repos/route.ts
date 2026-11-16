@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { ProjectService } from "@/lib/projects/project-service";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,6 +10,11 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { projectId: string } }
 ) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { projectId } = params;
     const storage = getArtifactStorage();
@@ -33,6 +39,17 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { projectId: string } }
 ) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isManager(auth)) {
+    return NextResponse.json(
+      { error: "Forbidden: Only Managers can connect repositories to projects." },
+      { status: 403 }
+    );
+  }
+
   try {
     const { projectId } = params;
     const body = await req.json();
@@ -71,6 +88,17 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { projectId: string } }
 ) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isManager(auth)) {
+    return NextResponse.json(
+      { error: "Forbidden: Only Managers can disconnect repositories from projects." },
+      { status: 403 }
+    );
+  }
+
   try {
     const { projectId } = params;
     const body = await req.json();

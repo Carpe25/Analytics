@@ -8,6 +8,7 @@ import { resolveProjectClient, DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config
 import { AnalyticsSnapshot, WorkLog } from "@/types";
 import { resolveProject, resolveCategory } from "@/lib/mcp/resolution";
 import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
+import { getRequestAuth, isManager } from "@/lib/auth/guard";
 
 const WorkLogInputSchema = z.object({
   developerName: z.string().optional(),
@@ -21,19 +22,6 @@ const WorkLogInputSchema = z.object({
   date: z.string().optional(),
 });
 
-function checkApiKey(req: NextRequest): boolean {
-  const expectedKey = process.env.TRACKER_API_KEY;
-  if (!expectedKey || !expectedKey.trim()) {
-    return true;
-  }
-
-  const authHeader = req.headers.get("authorization");
-  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-  const customHeader = req.headers.get("x-api-key")?.trim();
-
-  return bearerToken === expectedKey || customHeader === expectedKey;
-}
-
 function getDefaultTodayDate(): string {
   const tz = process.env.APP_TIMEZONE || "Asia/Kolkata";
   try {
@@ -44,8 +32,12 @@ function getDefaultTodayDate(): string {
 }
 
 export async function POST(req: NextRequest) {
-  if (!checkApiKey(req)) {
-    return NextResponse.json({ error: "Unauthorized: Invalid or missing API key" }, { status: 401 });
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json(
+      { error: "Unauthorized: Missing valid session token or API key" },
+      { status: 401 }
+    );
   }
 
   let body: unknown;
@@ -68,15 +60,41 @@ export async function POST(req: NextRequest) {
 
   const { project, client, duration, category, description, taskTicketId } = parseResult.data;
 
-  // Resolve developer identity
-  const developerName =
-    parseResult.data.developerName?.trim() ||
-    process.env.DEVELOPER_NAME?.trim() ||
-    "Developer";
+  // Resolve and enforce developer identity
+  let developerName: string;
+  let developerId: string;
 
-  const developerId =
-    parseResult.data.developerId?.trim() ||
-    `dev-${developerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+  if (!isManager(auth) && auth.user) {
+    // Authenticated developer session: strictly enforce their own credentials!
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier);
+    developerName = auth.user.name || authCanon.name;
+    developerId = authCanon.id;
+
+    // If caller attempted to pass someone else's developerId or name, reject with 403
+    if (parseResult.data.developerId && resolveCanonicalDeveloper(parseResult.data.developerId).id !== authCanon.id) {
+      return NextResponse.json(
+        { error: "Forbidden: You cannot submit work logs on behalf of another developer." },
+        { status: 403 }
+      );
+    }
+    if (parseResult.data.developerName && resolveCanonicalDeveloper(parseResult.data.developerName).id !== authCanon.id) {
+      return NextResponse.json(
+        { error: "Forbidden: You cannot submit work logs on behalf of another developer." },
+        { status: 403 }
+      );
+    }
+  } else {
+    // API key or manager
+    developerName =
+      parseResult.data.developerName?.trim() ||
+      process.env.DEVELOPER_NAME?.trim() ||
+      "Developer";
+
+    developerId =
+      parseResult.data.developerId?.trim() ||
+      resolveCanonicalDeveloper(developerName).id;
+  }
 
   // Parse duration
   const durationResult = parseDurationToMinutes(duration);
@@ -135,6 +153,10 @@ export async function POST(req: NextRequest) {
   const resolvedProj = resolveProject(project, client, settings.projects, snapshot.projects);
   const resolvedCat = resolveCategory(category, snapshot.categories);
 
+  const MAX_SINGLE_WORK_LOG_MINUTES = 480; // 8 hours max per manual entry
+  const finalMinutes = Math.min(durationResult.minutes, MAX_SINGLE_WORK_LOG_MINUTES);
+  const finalHours = Math.round((finalMinutes / 60) * 100) / 100;
+
   const logId = `log-mcp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const newLog: WorkLog = {
     id: logId,
@@ -145,8 +167,8 @@ export async function POST(req: NextRequest) {
     projectName: resolvedProj.name,
     client: resolvedProj.client,
     category: resolvedCat,
-    durationMinutes: durationResult.minutes,
-    hours: durationResult.hours,
+    durationMinutes: finalMinutes,
+    hours: finalHours,
     description: description.trim(),
     taskTicketId: taskTicketId?.trim() || undefined,
     sourceTab: "MCP",
@@ -216,8 +238,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!checkApiKey(req)) {
-    return NextResponse.json({ error: "Unauthorized: Invalid or missing API key" }, { status: 401 });
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json(
+      { error: "Unauthorized: Missing valid session token or API key" },
+      { status: 401 }
+    );
   }
 
   const { searchParams } = new URL(req.url);
@@ -228,6 +254,25 @@ export async function GET(req: NextRequest) {
   const limitParam = searchParams.get("limit");
   const projectFilter = searchParams.get("project")?.trim().toLowerCase();
   const categoryFilter = searchParams.get("category")?.trim().toLowerCase();
+
+  // Enforce developer account isolation: prevent viewing another developer's work logs
+  if (!isManager(auth) && auth.user) {
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier);
+
+    if (developerId && resolveCanonicalDeveloper(developerId).id !== authCanon.id) {
+      return NextResponse.json(
+        { error: "Forbidden: You are not authorized to access another developer's work logs." },
+        { status: 403 }
+      );
+    }
+    if (developerName && resolveCanonicalDeveloper(developerName).id !== authCanon.id) {
+      return NextResponse.json(
+        { error: "Forbidden: You are not authorized to access another developer's work logs." },
+        { status: 403 }
+      );
+    }
+  }
 
   const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : 50;
 
@@ -246,7 +291,14 @@ export async function GET(req: NextRequest) {
   let filtered = [...snapshot.workLogs];
 
   // Developer filter
-  if (developerId) {
+  if (!isManager(auth) && auth.user) {
+    // Developers can ONLY view their own records
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier).id;
+    filtered = filtered.filter(
+      (l) => resolveCanonicalDeveloper(l.developerId || l.developerName).id === authCanon
+    );
+  } else if (developerId) {
     const targetCanon = resolveCanonicalDeveloper(developerId).id;
     filtered = filtered.filter(
       (l) => resolveCanonicalDeveloper(l.developerId || l.developerName).id === targetCanon

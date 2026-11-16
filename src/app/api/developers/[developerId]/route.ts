@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getArtifactStorage } from "@/lib/storage/provider";
 import { resolveCanonicalDeveloper } from "@/lib/analytics/canonical-developer";
 import { DEFAULT_INTEGRATION_SETTINGS } from "@/lib/config/defaults";
+import { getRequestAuth, verifyDeveloperAccessOrForbidden } from "@/lib/auth/guard";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { developerId: string } }
 ) {
+  const auth = await getRequestAuth(req);
+  if (!auth.isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { developerId } = params;
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month");
@@ -22,6 +27,16 @@ export async function GET(
 
   const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
   const canonicalTarget = resolveCanonicalDeveloper(developerId, settings.developerGithubMapping);
+
+  // Enforce developer account isolation: non-managers cannot access other developers' accounts
+  const forbiddenResponse = verifyDeveloperAccessOrForbidden(
+    auth,
+    developerId,
+    settings.developerGithubMapping
+  );
+  if (forbiddenResponse) {
+    return forbiddenResponse;
+  }
 
   // Derive unique available months for this developer across all matching aliases
   const allDevLogs = snapshot.workLogs.filter(

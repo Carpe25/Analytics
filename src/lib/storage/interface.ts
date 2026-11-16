@@ -1,4 +1,4 @@
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client, ActiveSession } from "@/types";
 
 export interface SyncLockInfo {
   runId: string;
@@ -24,4 +24,7 @@ export interface IArtifactStorage {
   getMcpWorkLogs?(): Promise<WorkLog[]>;
   getLastCommitForAuthor?(authorName: string, authorEmail?: string): Promise<GitHubCommit | null>;
   insertGitHubCommit?(commit: GitHubCommit): Promise<void>;
+  saveActiveSession?(session: ActiveSession): Promise<void>;
+  getActiveSession?(developerId: string): Promise<ActiveSession | null>;
+  clearActiveSession?(developerId: string): Promise<void>;
 }
