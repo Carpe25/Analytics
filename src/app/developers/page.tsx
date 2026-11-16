@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Users,
   Search,
@@ -51,6 +51,7 @@ export default function DevelopersPage() {
   const [expandedDevId, setExpandedDevId] = useState<string | null>(null);
   const [devDetails, setDevDetails] = useState<Record<string, DeveloperDetailState>>({});
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const autoExpandedRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -84,16 +85,20 @@ export default function DevelopersPage() {
         if (data?.availableMonths) {
           setAvailableMonths(data.availableMonths);
         }
-        // If developer account with single developer view, auto-expand their profile
-        if (devs.length === 1 && !expandedDevId) {
+        // If developer account with single developer view, auto-expand their profile once initially
+        if (devs.length === 1 && !autoExpandedRef.current && !expandedDevId) {
+          autoExpandedRef.current = true;
           const devId = devs[0].id;
           setExpandedDevId(devId);
           fetchDeveloperDetail(devId, selectedMonth, startDate, endDate);
+        } else if (expandedDevId) {
+          // If already expanded, reload details with updated filters
+          fetchDeveloperDetail(expandedDevId, selectedMonth, startDate, endDate);
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [selectedMonth, startDate, endDate, expandedDevId]);
+  }, [selectedMonth, startDate, endDate]);
 
   useEffect(() => {
     loadDevelopers();

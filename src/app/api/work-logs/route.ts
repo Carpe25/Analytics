@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
 
   const { project, client, duration, category, description, taskTicketId } = parseResult.data;
 
+  const storage = getArtifactStorage();
+  const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
+
   // Resolve and enforce developer identity
   let developerName: string;
   let developerId: string;
@@ -67,18 +70,18 @@ export async function POST(req: NextRequest) {
   if (!isManager(auth) && auth.user) {
     // Authenticated developer session: strictly enforce their own credentials!
     const authDevIdentifier = auth.user.developerId || auth.user.username;
-    const authCanon = resolveCanonicalDeveloper(authDevIdentifier);
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings.developerGithubMapping);
     developerName = auth.user.name || authCanon.name;
     developerId = authCanon.id;
 
     // If caller attempted to pass someone else's developerId or name, reject with 403
-    if (parseResult.data.developerId && resolveCanonicalDeveloper(parseResult.data.developerId).id !== authCanon.id) {
+    if (parseResult.data.developerId && resolveCanonicalDeveloper(parseResult.data.developerId, settings.developerGithubMapping).id !== authCanon.id) {
       return NextResponse.json(
         { error: "Forbidden: You cannot submit work logs on behalf of another developer." },
         { status: 403 }
       );
     }
-    if (parseResult.data.developerName && resolveCanonicalDeveloper(parseResult.data.developerName).id !== authCanon.id) {
+    if (parseResult.data.developerName && resolveCanonicalDeveloper(parseResult.data.developerName, settings.developerGithubMapping).id !== authCanon.id) {
       return NextResponse.json(
         { error: "Forbidden: You cannot submit work logs on behalf of another developer." },
         { status: 403 }
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     developerId =
       parseResult.data.developerId?.trim() ||
-      resolveCanonicalDeveloper(developerName).id;
+      resolveCanonicalDeveloper(developerName, settings.developerGithubMapping).id;
   }
 
   // Parse duration
@@ -255,18 +258,21 @@ export async function GET(req: NextRequest) {
   const projectFilter = searchParams.get("project")?.trim().toLowerCase();
   const categoryFilter = searchParams.get("category")?.trim().toLowerCase();
 
+  const storage = getArtifactStorage();
+  const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
+
   // Enforce developer account isolation: prevent viewing another developer's work logs
   if (!isManager(auth) && auth.user) {
     const authDevIdentifier = auth.user.developerId || auth.user.username;
-    const authCanon = resolveCanonicalDeveloper(authDevIdentifier);
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings.developerGithubMapping);
 
-    if (developerId && resolveCanonicalDeveloper(developerId).id !== authCanon.id) {
+    if (developerId && resolveCanonicalDeveloper(developerId, settings.developerGithubMapping).id !== authCanon.id) {
       return NextResponse.json(
         { error: "Forbidden: You are not authorized to access another developer's work logs." },
         { status: 403 }
       );
     }
-    if (developerName && resolveCanonicalDeveloper(developerName).id !== authCanon.id) {
+    if (developerName && resolveCanonicalDeveloper(developerName, settings.developerGithubMapping).id !== authCanon.id) {
       return NextResponse.json(
         { error: "Forbidden: You are not authorized to access another developer's work logs." },
         { status: 403 }
@@ -276,7 +282,6 @@ export async function GET(req: NextRequest) {
 
   const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 50, 1), 200) : 50;
 
-  const storage = getArtifactStorage();
   const snapshot = await storage.readLatestAnalytics();
 
   if (!snapshot || !snapshot.workLogs) {
@@ -294,20 +299,20 @@ export async function GET(req: NextRequest) {
   if (!isManager(auth) && auth.user) {
     // Developers can ONLY view their own records
     const authDevIdentifier = auth.user.developerId || auth.user.username;
-    const authCanon = resolveCanonicalDeveloper(authDevIdentifier).id;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings.developerGithubMapping).id;
     filtered = filtered.filter(
-      (l) => resolveCanonicalDeveloper(l.developerId || l.developerName).id === authCanon
+      (l) => resolveCanonicalDeveloper(l.developerId || l.developerName, settings.developerGithubMapping).id === authCanon
     );
   } else if (developerId) {
-    const targetCanon = resolveCanonicalDeveloper(developerId).id;
+    const targetCanon = resolveCanonicalDeveloper(developerId, settings.developerGithubMapping).id;
     filtered = filtered.filter(
-      (l) => resolveCanonicalDeveloper(l.developerId || l.developerName).id === targetCanon
+      (l) => resolveCanonicalDeveloper(l.developerId || l.developerName, settings.developerGithubMapping).id === targetCanon
     );
   } else if (developerName) {
-    const targetCanon = resolveCanonicalDeveloper(developerName).id;
+    const targetCanon = resolveCanonicalDeveloper(developerName, settings.developerGithubMapping).id;
     filtered = filtered.filter(
       (l) =>
-        resolveCanonicalDeveloper(l.developerId || l.developerName).id === targetCanon ||
+        resolveCanonicalDeveloper(l.developerId || l.developerName, settings.developerGithubMapping).id === targetCanon ||
         l.developerName.toLowerCase().includes(developerName) ||
         l.developerId.toLowerCase().includes(developerName)
     );

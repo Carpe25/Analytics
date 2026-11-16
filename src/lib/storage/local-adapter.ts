@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { IArtifactStorage, SyncLockInfo } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client, ActiveSession } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 export class LocalArtifactStorage implements IArtifactStorage {
@@ -11,6 +11,7 @@ export class LocalArtifactStorage implements IArtifactStorage {
   private historyFilePath: string;
   private settingsFilePath: string;
   private clientsFilePath: string;
+  private sessionsDir: string;
 
   constructor(baseDir: string = ".artifacts") {
     this.baseDir = path.isAbsolute(baseDir) ? baseDir : path.resolve(process.cwd(), baseDir);
@@ -19,12 +20,14 @@ export class LocalArtifactStorage implements IArtifactStorage {
     this.historyFilePath = path.join(this.baseDir, "sync", "history.jsonl");
     this.settingsFilePath = path.join(this.baseDir, "config", "settings.json");
     this.clientsFilePath = path.join(this.baseDir, "config", "clients.json");
+    this.sessionsDir = path.join(this.baseDir, "sessions");
   }
 
   async init(): Promise<void> {
     await fs.mkdir(path.join(this.baseDir, "analytics", "snapshots"), { recursive: true });
     await fs.mkdir(path.join(this.baseDir, "sync"), { recursive: true });
     await fs.mkdir(path.join(this.baseDir, "config"), { recursive: true });
+    await fs.mkdir(this.sessionsDir, { recursive: true });
   }
 
   private async atomicWrite(targetPath: string, content: string): Promise<void> {
@@ -263,5 +266,33 @@ export class LocalArtifactStorage implements IArtifactStorage {
   async getMcpWorkLogs(): Promise<WorkLog[]> {
     const snap = await this.readLatestAnalytics();
     return (snap?.workLogs || []).filter((l) => l.sourceTab === "MCP");
+  }
+
+  private getSessionPath(developerId: string): string {
+    const safeDevId = developerId.toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+    return path.join(this.sessionsDir, `${safeDevId}.json`);
+  }
+
+  async saveActiveSession(session: ActiveSession): Promise<void> {
+    await this.init();
+    const filePath = this.getSessionPath(session.developerId);
+    await this.atomicWrite(filePath, JSON.stringify(session, null, 2));
+  }
+
+  async getActiveSession(developerId: string): Promise<ActiveSession | null> {
+    try {
+      const filePath = this.getSessionPath(developerId);
+      const data = await fs.readFile(filePath, "utf8");
+      return JSON.parse(data) as ActiveSession;
+    } catch {
+      return null;
+    }
+  }
+
+  async clearActiveSession(developerId: string): Promise<void> {
+    try {
+      const filePath = this.getSessionPath(developerId);
+      await fs.unlink(filePath);
+    } catch {}
   }
 }

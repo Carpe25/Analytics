@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { neon, NeonQueryFunction } from "@neondatabase/serverless";
 import { IArtifactStorage } from "./interface";
-import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client } from "@/types";
+import { AnalyticsSnapshot, IntegrationSettings, SyncRun, WorkLog, GitHubCommit, Client, ActiveSession } from "@/types";
 import { AnalyticsSnapshotSchema, IntegrationSettingsSchema } from "@/lib/validation/schemas";
 
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelayMs = 300): Promise<T> {
@@ -33,6 +33,7 @@ export class NeonArtifactStorage implements IArtifactStorage {
   private isRefreshingSettings: boolean = false;
 
   private cacheTtlMs: number = 5 * 60 * 1000; // 5 minutes TTL
+  private activeSessionsCache: Map<string, ActiveSession> = new Map();
 
   constructor(databaseUrl?: string) {
     this.databaseUrl = databaseUrl || process.env.DATABASE_URL || "";
@@ -59,6 +60,13 @@ export class NeonArtifactStorage implements IArtifactStorage {
           code VARCHAR(32),
           description TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `;
+      await this.sql`
+        CREATE TABLE IF NOT EXISTS active_sessions (
+          developer_id VARCHAR(128) PRIMARY KEY,
+          session_json JSONB NOT NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `;

@@ -112,7 +112,7 @@ export async function GET(
     const authCanon = resolveCanonicalDeveloper(authDevIdentifier, settings?.developerGithubMapping);
     visibleProjectLogs = projectLogs.filter((l) => l.developerId === authCanon.id);
     visibleProjectCommits = projectCommits.filter(
-      (c) => resolveCanonicalDeveloper(c.authorName || c.authorLogin, settings?.developerGithubMapping).id === authCanon.id
+      (c) => resolveCanonicalDeveloper(c.authorLogin || c.authorName, settings?.developerGithubMapping).id === authCanon.id
     );
   }
 
