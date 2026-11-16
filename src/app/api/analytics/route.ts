@@ -127,10 +127,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Filter recent activity if developer
-  let recentActivity = snapshot.recentActivity || [];
+  let recentActivity = (snapshot as any).recentActivity || [];
   if (isDevUser && authCanonId) {
     recentActivity = recentActivity.filter(
-      (a) => resolveCanonicalDeveloper(a.developerId || a.developerName, settings.developerGithubMapping).id === authCanonId
+      (a: any) => resolveCanonicalDeveloper(a.developerId || a.developerName, settings.developerGithubMapping).id === authCanonId
     );
   }
 
@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
     workLogs: filteredLogs,
     githubCommits: filteredCommits,
     recentActivity,
-    topProjects: snapshot.topProjects || [],
+    topProjects: (snapshot as any).topProjects || [],
     filtersApplied: {
       month,
       startDate,

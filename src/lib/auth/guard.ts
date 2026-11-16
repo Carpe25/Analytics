@@ -102,3 +102,34 @@ export function verifyDeveloperAccessOrForbidden(
   }
   return null;
 }
+
+/**
+ * Segregation of Duties (SoD) Anti-Self-Approval Guard:
+ * Prevents any user (developer, manager, or lead) from approving, overriding,
+ * or resolving audit flags on their OWN work logs or commits.
+ * Returns null if allowed, or 403 Forbidden NextResponse if user is attempting self-approval.
+ */
+export function verifySegregationOfDutiesOrForbidden(
+  auth: RequestAuthContext,
+  targetLogDeveloperIdOrName: string,
+  developerGithubMapping?: Record<string, string[]> | Record<string, string>
+): NextResponse | null {
+  if (auth.isApiKey || auth.isCron) return null; // Automated system/server tasks
+
+  if (auth.user) {
+    const authDevIdentifier = auth.user.developerId || auth.user.username;
+    const authCanon = resolveCanonicalDeveloper(authDevIdentifier, developerGithubMapping);
+    const targetCanon = resolveCanonicalDeveloper(targetLogDeveloperIdOrName, developerGithubMapping);
+
+    if (authCanon.id === targetCanon.id) {
+      return NextResponse.json(
+        {
+          error: "Forbidden: Segregation of Duties violation. You cannot approve or override your own work logs.",
+        },
+        { status: 403 }
+      );
+    }
+  }
+
+  return null;
+}

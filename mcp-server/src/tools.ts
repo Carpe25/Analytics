@@ -33,6 +33,19 @@ export const GetLastCommitInfoInputSchema = z.object({
   cwd: z.string().optional().describe("Optional repository path (defaults to current working directory)."),
 });
 
+export const StartTaskInputSchema = z.object({
+  project: z.string().optional().describe("Optional project name, code, or alias being worked on."),
+  client: z.string().optional().describe("Optional client name."),
+  category: z.string().optional().describe("Work category (e.g. Frontend, Backend, Bug Fix)."),
+  taskTicketId: z.string().optional().describe("Task / Issue ticket ID (e.g. ENG-104)."),
+  developerName: z.string().optional().describe("Developer name. Defaults to configured developer identity."),
+  forceNewSession: z.boolean().optional().describe("Set to true to force reset and start a fresh session anchor."),
+});
+
+export const GetActiveSessionInputSchema = z.object({
+  developerName: z.string().optional().describe("Developer name. Defaults to configured developer identity."),
+});
+
 export const TOOLS_DEFINITIONS = [
   {
     name: "log_work",
@@ -147,9 +160,60 @@ export const TOOLS_DEFINITIONS = [
       },
     },
   },
+  {
+    name: "start_task",
+    description: "Explicitly starts an active agentic work session anchored on the server with immutable real-time timestamping, ensuring accurate tracking for the first task.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description: "Optional project name, code, or alias.",
+        },
+        client: {
+          type: "string",
+          description: "Optional client name.",
+        },
+        category: {
+          type: "string",
+          description: "Optional task category (e.g., Frontend, Backend, Bug Fix).",
+        },
+        taskTicketId: {
+          type: "string",
+          description: "Optional ticket ID (e.g., ENG-104).",
+        },
+        developerName: {
+          type: "string",
+          description: "Optional developer name. Defaults to configured developer identity.",
+        },
+        forceNewSession: {
+          type: "boolean",
+          description: "Set to true to force reset and start a fresh session anchor.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_active_session",
+    description: "Queries the current active session status, start timestamp, and elapsed active time for the developer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        developerName: {
+          type: "string",
+          description: "Optional developer name.",
+        },
+      },
+    },
+  },
 ];
 
 export async function handleToolCall(client: TrackerApiClient, name: string, args: unknown) {
+  // Silent background heartbeat on any agent interaction (unless it is already session status check)
+  if (name !== "get_active_session" && typeof client?.touchSession === "function") {
+    client.touchSession({ source: "agent_tool" }).catch(() => {});
+  }
+
   switch (name) {
     case "log_work": {
       const parsed = LogWorkInputSchema.parse(args);
@@ -310,6 +374,70 @@ export async function handleToolCall(client: TrackerApiClient, name: string, arg
               `• Commit Timestamp: ${ctx.commitTimestamp ? new Date(ctx.commitTimestamp * 1000).toISOString() : "unknown"}`,
               `• Previous Author Commit: ${ctx.previousCommitTimestamp ? new Date(ctx.previousCommitTimestamp * 1000).toISOString() : "none in local history"}`,
             ].join("\n"),
+          },
+        ],
+      };
+    }
+
+    case "start_task": {
+      const parsed = StartTaskInputSchema.parse(args || {});
+      const res = await client.touchSession({
+        ...parsed,
+        source: "start_task_tool",
+      });
+      const s = res.session;
+      return {
+        content: [
+          {
+            type: "text",
+            text: [
+              `🚀 ${res.message}`,
+              "",
+              `• Developer: ${s.developerName} (${s.developerId})`,
+              `• Session Started At: ${s.startedAtUtc}`,
+              `• Elapsed Time: ${res.activeElapsedHours}h (${res.activeElapsedMinutes} mins)`,
+              s.project ? `• Project: ${s.project}` : null,
+              s.category ? `• Category: ${s.category}` : null,
+              s.taskTicketId ? `• Ticket: ${s.taskTicketId}` : null,
+              "",
+              `ℹ When you make your next Git commit, the exact elapsed time will automatically be calculated and logged.`,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          },
+        ],
+      };
+    }
+
+    case "get_active_session": {
+      const parsed = GetActiveSessionInputSchema.parse(args || {});
+      const res = await client.getActiveSession(parsed.developerName);
+      if (!res.active || !res.session) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No active session currently open. Start a task with start_task or prompt the agent to initialize tracking.",
+            },
+          ],
+        };
+      }
+      const s = res.session;
+      return {
+        content: [
+          {
+            type: "text",
+            text: [
+              `⏱ Active Work Session Status:`,
+              `• Developer: ${s.developerName}`,
+              `• Started: ${s.startedAtUtc}`,
+              `• Last Heartbeat: ${s.lastHeartbeatUtc}`,
+              `• Current Elapsed Time: ${res.activeElapsedHours}h (${res.activeElapsedMinutes} mins)`,
+              s.project ? `• Project: ${s.project}` : null,
+              s.taskTicketId ? `• Ticket: ${s.taskTicketId}` : null,
+            ]
+              .filter(Boolean)
+              .join("\n"),
           },
         ],
       };

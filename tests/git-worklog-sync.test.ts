@@ -42,9 +42,20 @@ describe("generateWorkLogsFromGitHubCommits", () => {
     },
   ];
 
+  function makeCommit(p: any): GitHubCommit {
+    return {
+      projectId: "proj-admin-portal",
+      projectName: "admin-portal",
+      commitDateLocal: p.commitDateUtc,
+      commitUrl: `https://github.com/${p.repoFullName}/commit/${p.sha}`,
+      fetchedAt: p.commitDateUtc,
+      ...p,
+    };
+  }
+
   it("filters commits before developer's latest log date and includes commits on or after it", () => {
     const commits: GitHubCommit[] = [
-      {
+      makeCommit({
         sha: "1111111111111111111111111111111111111111",
         shortSha: "1111111",
         message: "Old commit before last log date",
@@ -55,8 +66,8 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
-      {
+      }),
+      makeCommit({
         sha: "2222222222222222222222222222222222222222",
         shortSha: "2222222",
         message: "feat: work on 2026-11-01",
@@ -67,8 +78,8 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
-      {
+      }),
+      makeCommit({
         sha: "3333333333333333333333333333333333333333",
         shortSha: "3333333",
         message: "fix: work on 2026-11-02",
@@ -79,7 +90,7 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
+      }),
     ];
 
     const result = generateWorkLogsFromGitHubCommits(
@@ -124,7 +135,7 @@ describe("generateWorkLogsFromGitHubCommits", () => {
     };
 
     const commits: GitHubCommit[] = [
-      {
+      makeCommit({
         sha: "dcd04c21234567890abcdef1234567890abcdef1",
         shortSha: "dcd04c2",
         message: "feat: implemented automatic commit sync",
@@ -135,8 +146,8 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
-      {
+      }),
+      makeCommit({
         sha: "abc99991234567890abcdef1234567890abcdef1",
         shortSha: "abc9999",
         message: "docs: update readme with setup instructions",
@@ -147,7 +158,7 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
+      }),
     ];
 
     const result = generateWorkLogsFromGitHubCommits(
@@ -165,7 +176,7 @@ describe("generateWorkLogsFromGitHubCommits", () => {
 
   it("calculates time intervals correctly between chronological commits", () => {
     const commits: GitHubCommit[] = [
-      {
+      makeCommit({
         sha: "aaa1111111111111111111111111111111111111",
         shortSha: "aaa1111",
         message: "Commit 1",
@@ -174,8 +185,8 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
-      {
+      }),
+      makeCommit({
         sha: "bbb2222222222222222222222222222222222222",
         shortSha: "bbb2222",
         message: "Commit 2 (35 mins later)",
@@ -184,8 +195,8 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
-      {
+      }),
+      makeCommit({
         sha: "ccc3333333333333333333333333333333333333",
         shortSha: "ccc3333",
         message: "Commit 3 (3 mins later - under min duration)",
@@ -194,8 +205,8 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
-      {
+      }),
+      makeCommit({
         sha: "ddd4444444444444444444444444444444444444",
         shortSha: "ddd4444",
         message: "Commit 4 (6 hours later - over max gap)",
@@ -204,7 +215,7 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
+      }),
     ];
 
     const result = generateWorkLogsFromGitHubCommits(commits, [], mockProjects, mockDevMapping);
@@ -222,7 +233,7 @@ describe("generateWorkLogsFromGitHubCommits", () => {
 
   it("extracts task ticket IDs from commit messages and resolves connected project client", () => {
     const commits: GitHubCommit[] = [
-      {
+      makeCommit({
         sha: "eee5555555555555555555555555555555555555",
         shortSha: "eee5555",
         message: "feat(CARPE-402): implement client portal security",
@@ -231,7 +242,7 @@ describe("generateWorkLogsFromGitHubCommits", () => {
         repoOwner: "Carpe25",
         repoName: "admin-portal",
         repoFullName: "Carpe25/admin-portal",
-      },
+      }),
     ];
 
     const result = generateWorkLogsFromGitHubCommits(commits, [], mockProjects, mockDevMapping);

@@ -126,7 +126,6 @@ export async function POST(req: NextRequest) {
     workDate = getDefaultTodayDate();
   }
 
-  const storage = getArtifactStorage();
   const snapshot = (await storage.readLatestAnalytics()) || {
     schemaVersion: "1.0.0",
     generatedAtUtc: new Date().toISOString(),
@@ -149,8 +148,6 @@ export async function POST(req: NextRequest) {
     githubRepositories: [],
     warnings: [],
   };
-
-  const settings = (await storage.readIntegrationSettings()) || DEFAULT_INTEGRATION_SETTINGS;
 
   // Resolve project and category
   const resolvedProj = resolveProject(project, client, settings.projects, snapshot.projects);

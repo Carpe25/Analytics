@@ -1,3 +1,155 @@
+export interface DaySlice {
+  date: string;              // YYYY-MM-DD in local timezone
+  durationMinutes: number;
+  hours: number;
+  startTimeUtc: string;
+  endTimeUtc: string;
+  partIndex: number;
+  totalParts: number;
+}
+
+/**
+ * Returns the exact Unix millisecond timestamp when the local clock in `timezone` struck 00:00:00 on `dateStr` (YYYY-MM-DD).
+ */
+export function getLocalMidnightMs(dateStr: string, timezone: string = "Asia/Kolkata"): number {
+  const parts = dateStr.split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  let target = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  for (let i = 0; i < 3; i++) {
+    const formattedParts = formatter.formatToParts(new Date(target));
+    const p: Record<string, string> = {};
+    for (const part of formattedParts) p[part.type] = part.value;
+    const curDate = `${p.year}-${p.month}-${p.day}`;
+    const h = parseInt(p.hour, 10);
+    const min = parseInt(p.minute, 10);
+    const sec = parseInt(p.second, 10);
+
+    const diffMs = (h * 3600 + min * 60 + sec) * 1000;
+    if (curDate === dateStr && diffMs === 0) break;
+    if (curDate > dateStr) {
+      target -= 24 * 3600 * 1000 + diffMs;
+    } else if (curDate < dateStr) {
+      target += 24 * 3600 * 1000 - diffMs;
+    } else {
+      target -= diffMs;
+    }
+  }
+  return target;
+}
+
+export function getNextDateStr(dateStr: string): string {
+  const parts = dateStr.split("-").map(Number);
+  const next = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + 1, 12, 0, 0));
+  return next.toISOString().slice(0, 10);
+}
+
+/**
+ * Splits a continuous work duration between `startMs` and `endMs` across midnight boundaries
+ * according to the specified timezone.
+ *
+ * Example: 10:00 PM to 04:00 AM (6 hours) produces:
+ * - Slice 1: Day 1 (120 mins / 2.0h)
+ * - Slice 2: Day 2 (240 mins / 4.0h)
+ */
+export function splitDurationAcrossMidnight(
+  startMs: number,
+  endMs: number,
+  timezone: string = "Asia/Kolkata"
+): DaySlice[] {
+  if (endMs <= startMs) {
+    const dStr = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date(startMs));
+    return [
+      {
+        date: dStr,
+        durationMinutes: 1,
+        hours: 0.02,
+        startTimeUtc: new Date(startMs).toISOString(),
+        endTimeUtc: new Date(endMs).toISOString(),
+        partIndex: 1,
+        totalParts: 1,
+      },
+    ];
+  }
+
+  const getLocalDate = (ms: number) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date(ms));
+
+  const startDateStr = getLocalDate(startMs);
+  const endDateStr = getLocalDate(endMs);
+
+  // If both fall on the same local date, no midnight split is required
+  if (startDateStr === endDateStr) {
+    const durationMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+    return [
+      {
+        date: startDateStr,
+        durationMinutes,
+        hours: Math.round((durationMinutes / 60) * 100) / 100,
+        startTimeUtc: new Date(startMs).toISOString(),
+        endTimeUtc: new Date(endMs).toISOString(),
+        partIndex: 1,
+        totalParts: 1,
+      },
+    ];
+  }
+
+  // Crosses one or more midnights: split segment by segment preserving total duration
+  const totalIntervalMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+  const slices: Omit<DaySlice, "partIndex" | "totalParts">[] = [];
+  let curStartMs = startMs;
+  let allocatedMinutes = 0;
+
+  while (curStartMs < endMs) {
+    const curDateStr = getLocalDate(curStartMs);
+    const nextDayDateStr = getNextDateStr(curDateStr);
+    const nextMidnightMs = getLocalMidnightMs(nextDayDateStr, timezone);
+
+    // Safeguard to prevent infinite loops if nextMidnightMs <= curStartMs
+    const segmentEndMs = nextMidnightMs > curStartMs ? Math.min(endMs, nextMidnightMs) : endMs;
+    const isLastSlice = segmentEndMs >= endMs;
+
+    let durationMinutes: number;
+    if (isLastSlice) {
+      durationMinutes = Math.max(1, totalIntervalMinutes - allocatedMinutes);
+    } else {
+      const sliceFraction = (segmentEndMs - curStartMs) / (endMs - startMs);
+      durationMinutes = Math.max(1, Math.round(totalIntervalMinutes * sliceFraction));
+      allocatedMinutes += durationMinutes;
+    }
+
+    slices.push({
+      date: curDateStr,
+      durationMinutes,
+      hours: Math.round((durationMinutes / 60) * 100) / 100,
+      startTimeUtc: new Date(curStartMs).toISOString(),
+      endTimeUtc: new Date(segmentEndMs).toISOString(),
+    });
+
+    curStartMs = segmentEndMs;
+  }
+
+  const totalParts = slices.length;
+  return slices.map((s, idx) => ({
+    ...s,
+    partIndex: idx + 1,
+    totalParts,
+  }));
+}
+
 export interface ParsedDurationResult {
   minutes: number;
   hours: number;

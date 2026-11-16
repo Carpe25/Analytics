@@ -33,7 +33,6 @@ export class NeonArtifactStorage implements IArtifactStorage {
   private isRefreshingSettings: boolean = false;
 
   private cacheTtlMs: number = 5 * 60 * 1000; // 5 minutes TTL
-  private activeSessionsCache: Map<string, ActiveSession> = new Map();
 
   constructor(databaseUrl?: string) {
     this.databaseUrl = databaseUrl || process.env.DATABASE_URL || "";
@@ -622,6 +621,43 @@ export class NeonArtifactStorage implements IArtifactStorage {
     await this.init();
     await withRetry(() => this.sql`
       DELETE FROM clients WHERE id = ${id};
+    `);
+  }
+
+  async saveActiveSession(session: ActiveSession): Promise<void> {
+    await this.init();
+    await withRetry(() => this.sql`
+      INSERT INTO active_sessions (developer_id, session_json, updated_at)
+      VALUES (${session.developerId}, ${JSON.stringify(session)}, NOW())
+      ON CONFLICT (developer_id) DO UPDATE SET
+        session_json = EXCLUDED.session_json,
+        updated_at = NOW();
+    `);
+  }
+
+  async getActiveSession(developerId: string): Promise<ActiveSession | null> {
+    try {
+      await this.init();
+      const rows = await withRetry(() => this.sql`
+        SELECT session_json FROM active_sessions
+        WHERE developer_id = ${developerId}
+        LIMIT 1;
+      `);
+      if (rows && rows.length > 0) {
+        const raw = rows[0].session_json;
+        return typeof raw === "string" ? JSON.parse(raw) : (raw as ActiveSession);
+      }
+      return null;
+    } catch (err) {
+      console.warn("Neon getActiveSession error:", err);
+      return null;
+    }
+  }
+
+  async clearActiveSession(developerId: string): Promise<void> {
+    await this.init();
+    await withRetry(() => this.sql`
+      DELETE FROM active_sessions WHERE developer_id = ${developerId};
     `);
   }
 }

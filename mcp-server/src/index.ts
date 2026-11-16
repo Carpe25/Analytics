@@ -52,6 +52,8 @@ async function main() {
 
   // Handle tools listing
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Non-blocking session touch on agent startup
+    client.touchSession({ source: "agent_startup" }).catch(() => {});
     return {
       tools: TOOLS_DEFINITIONS,
     };

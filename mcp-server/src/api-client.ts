@@ -202,4 +202,48 @@ export class TrackerApiClient {
 
     return await res.json();
   }
+
+  async touchSession(payload: {
+    developerName?: string;
+    project?: string;
+    client?: string;
+    category?: string;
+    taskTicketId?: string;
+    source?: string;
+    forceNewSession?: boolean;
+  } = {}) {
+    const dev = payload.developerName || this.config.developerName;
+    const res = await this.fetchWithFallback("/work-logs/session/touch", {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        ...payload,
+        developerName: dev,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to touch session (HTTP ${res.status})`);
+    }
+
+    return await res.json();
+  }
+
+  async getActiveSession(developerName?: string) {
+    const dev = developerName || this.config.developerName;
+    const params = new URLSearchParams();
+    if (dev) params.set("developerName", dev);
+
+    const res = await this.fetchWithFallback(`/work-logs/session/active?${params.toString()}`, {
+      method: "GET",
+      headers: this.getHeaders(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to query active session (HTTP ${res.status})`);
+    }
+
+    return await res.json();
+  }
 }

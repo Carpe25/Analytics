@@ -32,6 +32,7 @@ describe("ProjectService Domain Isolation", () => {
           project: "Project",
           category: "Category",
           duration: "Duration",
+          description: "Description",
         },
       },
       projects: [
@@ -73,7 +74,6 @@ describe("ProjectService Domain Isolation", () => {
           developerCount: 1,
           logCount: 1,
           connectedRepos: ["Carpe25/cad-portal"],
-          categories: ["Development"],
         },
         {
           id: "proj-univ-diam-custom-portal",
@@ -85,7 +85,6 @@ describe("ProjectService Domain Isolation", () => {
           developerCount: 1,
           logCount: 1,
           connectedRepos: [],
-          categories: ["Development"],
         },
       ],
       developers: [],
@@ -137,16 +136,16 @@ describe("ProjectService Domain Isolation", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.project.githubRepos.length).toBe(1);
-    expect(result.project.githubRepos[0].owner).toBe("UnivDiam");
-    expect(result.project.githubRepos[0].repo).toBe("custom-portal-app");
+    expect(result.project?.githubRepos?.length).toBe(1);
+    expect(result.project?.githubRepos?.[0].owner).toBe("UnivDiam");
+    expect(result.project?.githubRepos?.[0].repo).toBe("custom-portal-app");
 
     // Verify it is now persisted in integration settings
     const settings = await storage.readIntegrationSettings();
     const saved = settings?.projects.find((p) => p.id === "proj-univ-diam-custom-portal");
     expect(saved).toBeDefined();
     expect(saved?.client).toBe("Universal Diamonds");
-    expect(saved?.githubRepos.length).toBe(1);
+    expect(saved?.githubRepos?.length).toBe(1);
   });
 
   it("disconnects a repository cleanly without affecting other settings", async () => {
@@ -159,7 +158,7 @@ describe("ProjectService Domain Isolation", () => {
 
     let settings = await storage.readIntegrationSettings();
     let cad = settings?.projects.find((p) => p.id === "proj-cad-portal");
-    expect(cad?.githubRepos.length).toBe(2);
+    expect(cad?.githubRepos?.length).toBe(2);
 
     // Disconnect
     const result = await service.disconnectRepository("proj-cad-portal", "Carpe25", "secondary-repo");
@@ -167,8 +166,8 @@ describe("ProjectService Domain Isolation", () => {
 
     settings = await storage.readIntegrationSettings();
     cad = settings?.projects.find((p) => p.id === "proj-cad-portal");
-    expect(cad?.githubRepos.length).toBe(1);
-    expect(cad?.githubRepos[0].repo).toBe("cad-portal");
+    expect(cad?.githubRepos?.length).toBe(1);
+    expect(cad?.githubRepos?.[0].repo).toBe("cad-portal");
   });
 
   it("keeps repositories isolated when two different clients have identically named projects", async () => {

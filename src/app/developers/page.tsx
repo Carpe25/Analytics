@@ -52,6 +52,11 @@ export default function DevelopersPage() {
   const [devDetails, setDevDetails] = useState<Record<string, DeveloperDetailState>>({});
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
   const autoExpandedRef = useRef(false);
+  const expandedDevIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    expandedDevIdRef.current = expandedDevId;
+  }, [expandedDevId]);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -85,15 +90,17 @@ export default function DevelopersPage() {
         if (data?.availableMonths) {
           setAvailableMonths(data.availableMonths);
         }
+        const currentExpanded = expandedDevIdRef.current;
         // If developer account with single developer view, auto-expand their profile once initially
-        if (devs.length === 1 && !autoExpandedRef.current && !expandedDevId) {
+        if (devs.length === 1 && !autoExpandedRef.current && !currentExpanded) {
           autoExpandedRef.current = true;
           const devId = devs[0].id;
           setExpandedDevId(devId);
+          expandedDevIdRef.current = devId;
           fetchDeveloperDetail(devId, selectedMonth, startDate, endDate);
-        } else if (expandedDevId) {
+        } else if (currentExpanded) {
           // If already expanded, reload details with updated filters
-          fetchDeveloperDetail(expandedDevId, selectedMonth, startDate, endDate);
+          fetchDeveloperDetail(currentExpanded, selectedMonth, startDate, endDate);
         }
       })
       .catch(() => {})
