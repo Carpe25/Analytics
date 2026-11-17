@@ -2,10 +2,13 @@
   "mcpServers": {
     "project-analytics": {
       "command": "node",
-      "args": ["/home/jay/mcp-servers/tracker-mcp/build/index.js"],
+      "args": [
+        "/home/jay/Desktop/my projects/Analytics system/public/tracker.mjs"
+      ],
       "env": {
         "TRACKER_API_URL": "https://analytics-two-ashen.vercel.app/api",
-        "DEVELOPER_NAME": "Jay"
+        "DEVELOPER_NAME": "Jay",
+        "TRACKER_API_KEY": "2c3899f2a0bdd70ab1aa613d2d55dfb60046f3db83c52464"
       }
     }
   }

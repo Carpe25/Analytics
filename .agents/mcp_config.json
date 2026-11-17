@@ -3,7 +3,7 @@
     "project-analytics": {
       "command": "node",
       "args": [
-        "/home/jay/mcp-servers/tracker-mcp/build/index.js"
+        "/home/jay/Desktop/my projects/Analytics system/public/tracker.mjs"
       ],
       "env": {
         "TRACKER_API_URL": "https://analytics-two-ashen.vercel.app/api",

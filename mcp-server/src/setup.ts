@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import readline from "readline";
+import { execSync } from "child_process";
 import { installGitHook } from "./git-hook.js";
 
 interface SetupOptions {
@@ -265,7 +266,20 @@ export async function runSetup() {
     }
   }
 
-  // If not passed via args, prompt interactively
+  // If not passed via args, auto-detect from Git or OS before prompting
+  if (!developerName) {
+    try {
+      const gitName = (
+        execSync("git config --global user.name", { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }) ||
+        execSync("git config user.name", { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] })
+      ).trim();
+      if (gitName) {
+        developerName = gitName;
+      }
+    } catch {}
+  }
+
+  // If still not determined and in an interactive TTY, prompt user
   if (!developerName && process.stdin.isTTY) {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -301,7 +315,11 @@ export async function runSetup() {
   const scriptPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
   let serverConfig: { command: string; args: string[]; env: Record<string, string> };
 
-  if (scriptPath && fs.existsSync(scriptPath) && scriptPath.endsWith(".js")) {
+  if (
+    scriptPath &&
+    fs.existsSync(scriptPath) &&
+    (scriptPath.endsWith(".js") || scriptPath.endsWith(".mjs") || scriptPath.endsWith(".cjs"))
+  ) {
     serverConfig = {
       command: "node",
       args: [scriptPath],

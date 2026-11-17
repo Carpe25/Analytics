@@ -48,7 +48,10 @@ export interface InstallHookOptions {
 }
 
 export function installGitHook(options: InstallHookOptions = {}) {
-  const scriptPath = path.resolve(__dirname, "index.js");
+  const currentExec = process.argv[1] ? path.resolve(process.argv[1]) : "";
+  const scriptPath = currentExec && fs.existsSync(currentExec)
+    ? currentExec
+    : path.resolve(__dirname, "index.js");
   const safeScriptPath = scriptPath.replace(/\\/g, "/");
 
   const createHookScript = (name: string) => `#!/usr/bin/env bash

@@ -25,6 +25,11 @@ const PUBLIC_PATHS = [
   "/api/tickets/upload",
   "/api/tickets/photos",
   "/api/projects/public-directory",
+  "/tracker.mjs",
+  "/setup.sh",
+  "/setup.ps1",
+  "/api/setup.sh",
+  "/api/setup.ps1",
 ];
 
 export async function middleware(req: NextRequest) {
