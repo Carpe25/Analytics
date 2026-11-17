@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run build:tracker && next build",
-    "build:tracker": "mkdir -p public && npx esbuild mcp-server/src/index.ts --bundle --platform=node --target=node18 --outfile=public/tracker.mjs --format=esm --banner:js='import { createRequire } from \"module\"; const require = createRequire(import.meta.url);'",
+    "build": "next build",
+    "build:tracker": "mkdir -p public && cd mcp-server && npx esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=../public/tracker.mjs --format=esm --banner:js='import { createRequire } from \"module\"; const require = createRequire(import.meta.url);'",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
