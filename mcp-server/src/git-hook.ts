@@ -3,7 +3,7 @@ import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
 import { TrackerApiClient } from "./api-client.js";
-import { autoLogCurrentGitCommit, runGitCommand } from "./git-engine.js";
+import { autoLogCurrentGitCommit, getGitCommitContext, runGitCommand } from "./git-engine.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +11,19 @@ const __dirname = path.dirname(__filename);
 export async function handleGitHookExecution(args: string[]) {
   const client = new TrackerApiClient();
   const hookType = args[0] || "post-commit";
+
+  if (hookType === "post-checkout") {
+    try {
+      const ctx = getGitCommitContext();
+      if (ctx.isGitRepo) {
+        await client.touchSession({
+          developerName: ctx.authorName,
+          source: "git_checkout",
+        });
+      }
+    } catch {}
+    return;
+  }
 
   try {
     const res = await autoLogCurrentGitCommit(client);
@@ -37,17 +50,14 @@ export interface InstallHookOptions {
 export function installGitHook(options: InstallHookOptions = {}) {
   const scriptPath = path.resolve(__dirname, "index.js");
   const safeScriptPath = scriptPath.replace(/\\/g, "/");
-  const hookName = options.hookName || "post-commit";
 
-  const hookContent = `#!/usr/bin/env bash
+  const createHookScript = (name: string) => `#!/usr/bin/env bash
 # Carpe Analytics MCP Auto-Logger
-# Automatically logs time on git commit/push to connected projects
-
 if command -v node >/dev/null 2>&1; then
   NODE_BIN="$(command -v node)"
   TRACKER_SCRIPT="${safeScriptPath}"
   if [ -f "$TRACKER_SCRIPT" ]; then
-    "$NODE_BIN" "$TRACKER_SCRIPT" git-hook "${hookName}"
+    "$NODE_BIN" "$TRACKER_SCRIPT" git-hook "${name}"
   fi
 fi
 `;
@@ -60,16 +70,21 @@ fi
       fs.mkdirSync(globalHooksDir, { recursive: true });
     }
 
-    const targetHookFile = path.join(globalHooksDir, hookName);
-    fs.writeFileSync(targetHookFile, hookContent, { mode: 0o755 });
+    // Install both post-commit (for logging) and post-checkout (for session auto-start)
+    const hooksToInstall = ["post-commit", "post-checkout"];
+    for (const h of hooksToInstall) {
+      const targetHookFile = path.join(globalHooksDir, h);
+      fs.writeFileSync(targetHookFile, createHookScript(h), { mode: 0o755 });
+    }
 
     // Set git config --global core.hooksPath
     runGitCommand(`config --global core.hooksPath "${globalHooksDir}"`);
 
-    console.log(`\x1b[32m✔ Global Git hook installed successfully!\x1b[0m`);
-    console.log(`• Hook Location: ${targetHookFile}`);
+    console.log(`\x1b[32m✔ Global Git hooks installed successfully!\x1b[0m`);
+    console.log(`• Hooks Directory: ${globalHooksDir}`);
+    console.log(`• Installed: post-commit, post-checkout`);
     console.log(`• Git Config: core.hooksPath = ${globalHooksDir}`);
-    console.log(`• Every repository on your machine will now automatically log work to connected projects on ${hookName}.`);
+    console.log(`• Every repository on your machine will now automatically track sessions on branch checkout and log work on commit.`);
   } else {
     // Local repository hook
     const isGit = runGitCommand("rev-parse --is-inside-work-tree");
@@ -84,8 +99,9 @@ fi
       fs.mkdirSync(hooksDir, { recursive: true });
     }
 
+    const hookName = options.hookName || "post-commit";
     const targetHookFile = path.join(hooksDir, hookName);
-    fs.writeFileSync(targetHookFile, hookContent, { mode: 0o755 });
+    fs.writeFileSync(targetHookFile, createHookScript(hookName), { mode: 0o755 });
 
     console.log(`\x1b[32m✔ Local Git hook installed successfully in current repository!\x1b[0m`);
     console.log(`• Hook Location: ${targetHookFile}`);

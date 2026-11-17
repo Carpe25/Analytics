@@ -227,7 +227,7 @@ Open terminal/PowerShell and navigate to your existing directory:
 
 **macOS / Linux:**
 ```bash
-cd ~/mcp-servers/tracker-mcp
+cd ~/mcp-servers/tracker-mcp  # or your local clone of Analytics system
 git pull origin main
 npm install
 npm run build
@@ -241,24 +241,25 @@ npm install
 npm run build
 ```
 
-### Step 2: Re-run Setup or Enable the Git Hook
-You can either refresh your entire setup:
-```bash
-node build/index.js setup --name "Your Full Name"
-```
-
-Or, if you only want to install/update the **Global Git Auto-Commit Hook**:
+### Step 2: Update the Global Git Hooks
+Run the hook installer to update your global `post-commit` (auto-logger with midnight split) and install `post-checkout` (session auto-start on branch switch):
 ```bash
 node build/index.js install-hook --global
 ```
 
-### Step 3: Verify the Git Hook Registration
+### Step 3: Restart Your Editor / AI Agent
+Restart your editor (Cursor, VS Code, Claude Desktop, Antigravity) so that it terminates the previous background Node MCP process and launches the new build with `start_task` and `get_active_session`.
+
+### Step 4: Verify the Installation
 Run:
 ```bash
 git config --global core.hooksPath
 ```
 - **macOS / Linux**: It should output `/Users/yourname/.git-tracker-hooks` (or `~/.git-tracker-hooks`).
 - **Windows**: It should output `C:/Users/yourname/.git-tracker-hooks`.
+
+And in your AI editor chat, verify by asking:
+> *"What is my active session status?"* (should invoke `get_active_session`).
 
 ---
 
