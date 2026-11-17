@@ -6,8 +6,10 @@ This guide provides end-to-end instructions for installing, configuring, updatin
 
 ## Table of Contents
 1. [How It Works (MCP Tools + Auto-Commit Logging)](#1-how-it-works)
+   - [Real-Time Active Sessions & The "First Task" Solution](#real-time-active-sessions--the-first-task-solution)
    - [Time Calculation & Intelligent Windowing](#time-calculation--intelligent-windowing)
-   - [Manual Time Overrides via Commit Tags (`[time: 5h]`)](#manual-time-overrides-via-commit-tags)
+   - [Cross-Midnight Shift Pro-Rating (24/7 Developer Support)](#cross-midnight-shift-pro-rating-247-developer-support)
+   - [Manual Time Overrides & Anti-Manipulation Protection](#manual-time-overrides--anti-manipulation-protection)
 2. [Fresh Installation (For New Developers)](#2-fresh-installation-for-new-developers)
    - [macOS (Apple Silicon & Intel)](#21-macos-setup)
    - [Windows (PowerShell)](#22-windows-setup)
@@ -15,8 +17,9 @@ This guide provides end-to-end instructions for installing, configuring, updatin
 3. [Upgrade Guide (For Existing Developers / Already Cloned)](#3-upgrade-guide-for-existing-developers)
 4. [Manual Editor Configuration (Alternative to Auto-Setup)](#4-manual-editor-configuration)
 5. [Testing & Verification](#5-testing--verification)
-   - [Test 1: Verify AI Assistant MCP Tools](#test-1-verify-ai-assistant-mcp-tools)
+   - [Test 1: Verify AI Assistant MCP Tools & Active Session](#test-1-verify-ai-assistant-mcp-tools--active-session)
    - [Test 2: Verify Automatic Git Commit Logging](#test-2-verify-automatic-git-commit-logging)
+   - [Test 3: Verify Branch Checkout Session Anchor](#test-3-verify-branch-checkout-session-anchor)
 6. [Troubleshooting & Common Questions](#6-troubleshooting--common-questions)
 
 ---
@@ -33,13 +36,16 @@ The tracker integrates your developer workflow into the **Project Analytics Plat
 │  (Cursor / Claude / Antigravity) │          (Any Terminal / IDE)       │
 │                                  │                                     │
 │  "Log 1.5h on Custom Portal      │  git commit -m "feat(auth): login"  │
-│   for Univ Diam fixing bug"      │                  │                  │
-│                │                 │                  ▼                  │
-│                ▼                 │        [Global Post-Commit Hook]    │
-│         [MCP Server Tools]       │        • Calculates elapsed time    │
-│         • log_work               │        • Resolves project & client  │
-│         • get_my_logs            │        • Maps commit category       │
-│         • list_projects          │                  │                  │
+│   for Univ Diam fixing bug"      │  git checkout -b feat/new-module    │
+│                │                 │                  │                  │
+│                ▼                 │                  ▼                  │
+│      [MCP Server Tools]          │        [Dual Global Git Hooks]      │
+│      • log_work                  │        • post-commit (Auto-Logger)  │
+│      • start_task                │        • post-checkout (Session)    │
+│      • get_active_session        │        • Calculates elapsed time    │
+│      • list_projects             │        • Resolves project & client  │
+│      • get_my_logs               │        • Splits cross-midnight logs │
+│      • Auto Heartbeat Touch      │                                     │
 └────────────────┬─────────────────┴──────────────────┬──────────────────┘
                  │                                    │
                  ▼                                    ▼
@@ -48,52 +54,73 @@ The tracker integrates your developer workflow into the **Project Analytics Plat
        │     (https://analytics-two-ashen.vercel.app/api)       │
        │                                                        │
        │ • Deduplicated Client & Project Breakdown              │
-       │ • Developer Dashboard & Live Work Logs                 │
-       │ • Synchronized with Neon Database & GitHub Sync        │
+       │ • Real-time Session Anchors & Midnight Slicing         │
+       │ • Anti-Manipulation Durations & Audit History          │
+       │ • Segregation of Duties (SoD) Verification             │
        └────────────────────────────────────────────────────────┘
 ```
 
 1. **Conversational AI Logging (MCP Tools)**:
-   Your AI assistant (Cursor, Claude Desktop, Antigravity CLI, Windsurf, Zed) gains native tools (`log_work`, `get_my_logs`, `list_projects`, `list_categories`). You can log time conversationally at any point during pair programming.
+   Your AI assistant (Cursor, Claude Desktop, Antigravity CLI, Windsurf, Zed) gains native tools:
+   - `start_task`: Explicitly mark the start of a coding task on a project with description.
+   - `get_active_session`: Query current active session duration and start time.
+   - `log_work`: Manually log a specific time entry conversationally.
+   - `get_my_logs`: Retrieve today's logged hours and task summaries.
+   - `list_projects` & `list_categories`: Browse configured projects and category IDs.
+   - **Silent Heartbeats**: MCP automatically pings the server with a lightweight heartbeat whenever your AI assistant initializes or runs a tool, maintaining continuous session awareness.
 
-2. **Automatic Git Commit Logging (Zero-Effort Background Logging)**:
-   Whenever you run `git commit` in any repository linked to a project in the analytics system (e.g. `custom-portal`, `cad-portal`, `admin-portal`):
-   - The global Git hook triggers automatically in the background.
-   - It captures the commit hash, author, branch, and commit message.
-   - It intelligently calculates time worked since your previous commit.
-   - It categorizes the task based on standard commit conventions (`feat:` → *Frontend/Backend*, `fix:` → *Bug Fix*, `docs:` → *Documentation*, etc.).
-   - It transmits the log directly to the Analytics API and outputs a confirmation badge right inside your terminal:
+2. **Dual Global Git Hooks (Zero-Effort Background Tracking)**:
+   - **`post-checkout` Hook**: Triggers whenever you switch branches (`git checkout` / `git switch`). Silently registers a session start anchor for that repository and branch.
+   - **`post-commit` Hook**: Triggers on every `git commit`. It captures commit metadata, calculates duration anchored to your active session start, resolves client and project, splits cross-midnight hours if applicable, and logs the work entry.
+   - Terminal confirmation badge output:
      ```bash
-     ✔ [Analytics] Logged 0.75h to Custom Portal (Univ Diam) | Today's Total: 3.5h
+     ✔ [Analytics] Logged 1.25h to Custom Portal (Univ Diam) | Today's Total: 3.5h
      ```
+
+### Real-Time Active Sessions & The "First Task" Solution
+
+In traditional commit trackers, the very first commit of the day presents a problem: because there is no prior commit to measure against, trackers are forced to guess an arbitrary flat number (like 45 minutes).
+
+The Carpe Analytics Tracker solves this definitively:
+- When you open your AI editor, chat with the assistant, or switch branches (`git checkout -b feature`), a server-side **active session timestamp** is anchored.
+- When you create your first commit 2 hours later, the system measures against this anchored start time and records the genuine **2.0 hours** worked.
+- If no session was anchored and no prior commit exists, it safely defaults to 45 minutes (0.75h).
 
 ### Time Calculation & Intelligent Windowing
 
-The system calculates duration using smart calendar-day windowing to prevent accidental overnight runaway logs while honoring long coding sessions:
+- **Continuous Sessions**: Between sequential commits on the same day, elapsed time is measured and rounded to 5-minute increments.
+- **Micro-Commits**: Commits created within 10 minutes of a previous commit are floored to **10 minutes (0.17h)** so quick typo fixes or formatting changes receive appropriate minimum credit.
+- **Idle Gap Capping**: If you step away for lunch or leave a chat window open for hours without activity, gaps exceeding **90 minutes** are capped to prevent idle runaway accumulation.
 
-- **Same-Day Continuous Sessions**: If you are working on the same calendar day, active sessions are recognized up to **8 hours (480 minutes)**. Your exact delta between commits is rounded to the nearest 5 minutes.
-- **Overnight / Next-Day First Commit**: When your previous commit was yesterday (or $>4$ hours ago), the system assumes this is your first commit of the day and defaults to **45 minutes (0.75h)**.
-- **Quick Micro-Commits**: Commits made within 10 minutes of the previous commit are floored to **10 minutes (0.17h)** so quick typo fixes or formatting changes receive minimum work credit.
+### Cross-Midnight Shift Pro-Rating (24/7 Developer Support)
 
-### Manual Time Overrides via Commit Tags
+For developers working night shifts or across midnight (e.g. 10:00 PM to 4:00 AM):
+- The server computes the developer's local midnight timestamp using their local timezone (default `Asia/Kolkata` / configurable).
+- Instead of dumping all 6 hours into a single day, the commit automatically generates **two distinct pro-rated entries**:
+  - **Day 1**: 10:00 PM – 12:00 AM (2.0 hours logged on Day 1).
+  - **Day 2**: 12:00 AM – 4:00 AM (4.0 hours logged on Day 2).
+- Both logs link to the same commit hash with full audit trail in the analytics dashboard.
 
-If an issue takes longer than 4 hours, or if your first commit of the day was after 1.5–2 hours of continuous work, you can explicitly override the time in your commit message using brackets:
+### Manual Time Overrides & Anti-Manipulation Protection
+
+If you worked offline or spent hours researching before committing, you can specify custom duration tags in your commit message:
 
 ```bash
 # Explicit hours
-git commit -m "feat(auth): complete OAuth migration [time: 5h]"
-git commit -m "fix(cad): resolve heavy mesh render leak [3.5h]"
-
-# First commit of the morning after 1.5 hours of work
-git commit -m "feat(api): scaffold new client endpoints [1.5h]"
+git commit -m "feat(auth): complete OAuth migration [time: 3h]"
+git commit -m "fix(cad): resolve heavy mesh render leak [2.5h]"
 
 # Minute formats
 git commit -m "docs: write architecture overview [90m]"
 ```
 
 **Supported tag patterns:**
-- `[time: 5h]`, `[5h]`, `[5.5 hrs]`, `[2h 30m]`, `[90m]`
-- The system automatically parses the tag, sets the exact work log duration (e.g. `5.0h` or `1.5h`), and strips the tag from the final title stored on the dashboard.
+`[time: 3h]`, `[3h]`, `[2.5 hrs]`, `[2h 30m]`, `[90m]`
+
+**Anti-Manipulation Clamping:**
+To prevent developers from arbitrarily tagging unrealistic durations (e.g. claiming `[time: 10h]` on a 15-minute commit):
+- The server validates the claimed time against actual elapsed session time and recent commit history (+15 minutes grace).
+- If the claimed tag exceeds verifiable elapsed time, the system clamps the logged duration to the legitimate elapsed maximum, logging an audit notice on the dashboard while honoring honest work.
 
 ---
 
@@ -131,7 +158,9 @@ node build/index.js setup --name "Your Full Name"
 
 **What this command does automatically:**
 1. Detects and configures all installed AI editors (**Cursor**, **Claude Desktop**, **Antigravity CLI**, **Windsurf**, **Zed**, and **VS Code Cline**).
-2. Generates the global Git hook in `~/.git-tracker-hooks/post-commit`.
+2. Generates the dual global Git hooks in `~/.git-tracker-hooks/`:
+   - `post-commit`: Automatically logs duration and commit details to analytics.
+   - `post-checkout`: Automatically anchors session start whenever you checkout/switch branches.
 3. Configures `git config --global core.hooksPath ~/.git-tracker-hooks`.
 
 #### Step 4: Restart Your Editors
@@ -179,7 +208,9 @@ node build/index.js setup --name "Your Full Name"
 
 **What this command does automatically on Windows:**
 1. Writes valid, properly-escaped JSON configurations to Cursor (`%APPDATA%\Cursor` and `%USERPROFILE%\.cursor`), Claude Desktop (`%APPDATA%\Claude`), Windsurf, and Antigravity.
-2. Installs the global post-commit hook in `%USERPROFILE%\.git-tracker-hooks\post-commit`.
+2. Installs the dual global Git hooks:
+   - `%USERPROFILE%\.git-tracker-hooks\post-commit` (auto-logger)
+   - `%USERPROFILE%\.git-tracker-hooks\post-checkout` (session anchor)
 3. Sets `git config --global core.hooksPath "$HOME/.git-tracker-hooks"`.
 
 #### Step 4: Restart Your Editors
@@ -214,7 +245,7 @@ npm run build
 node build/index.js setup --name "Your Full Name"
 ```
 
-If you use Antigravity Snap, the setup script automatically writes the configuration to both your standard system home and your Snap common sandbox (`~/snap/antigravity-cli/common/.gemini/config/mcp_config.json`).
+If you use Antigravity Snap, the setup script automatically writes the configuration to both your standard system home and your Snap common sandbox (`~/snap/antigravity-cli/common/.gemini/config/mcp_config.json`). It also generates both `post-commit` and `post-checkout` hooks in `~/.git-tracker-hooks/`.
 
 ---
 
@@ -337,14 +368,17 @@ If you prefer configuring your editor JSON files by hand rather than using the a
 
 ## 5. Testing & Verification
 
-### Test 1: Verify AI Assistant MCP Tools
+### Test 1: Verify AI Assistant MCP Tools & Active Session
 1. Restart your AI editor (Cursor, Claude, or Antigravity).
 2. Open any conversation and ask:
-   > "What projects are available in the analytics tracker?"
-3. The AI will invoke `list_projects` and list all synchronized projects and clients (e.g. *Custom Portal [CP-UD]* under *Univ Diam*, *CAD Portal* under *Carpe Diem*, etc.).
+   > *"What projects are available in the analytics tracker?"*
+   The AI invokes `list_projects` and lists all synchronized projects and clients.
+3. Check your active session status:
+   > *"What is my active session status?"*
+   The AI invokes `get_active_session` and reports the elapsed time and start timestamp.
 4. Test manual logging:
-   > "Log 1h on Custom Portal for Univ Diam doing testing."
-5. The AI will invoke `log_work` and return the logged entry and updated daily total.
+   > *"Log 1h on Custom Portal for Univ Diam doing testing."*
+   The AI invokes `log_work` and returns the logged entry and updated daily total.
 
 ### Test 2: Verify Automatic Git Commit Logging
 1. Open any repository connected to a project on the Analytics platform.
@@ -358,6 +392,14 @@ If you prefer configuring your editor JSON files by hand rather than using the a
    ✔ [Analytics] Logged 0.5h to Custom Portal (Univ Diam) | Today's Total: 3.5h
    ```
 5. Check your live dashboard at `https://analytics-two-ashen.vercel.app/projects` — the work log and commit will appear in your project metrics!
+
+### Test 3: Verify Branch Checkout Session Anchor
+1. In your repository terminal, switch or create a branch:
+   ```bash
+   git checkout -b feature/auth-redesign
+   ```
+2. The `post-checkout` hook runs silently in the background and registers the start anchor with the API.
+3. When you make your first commit on that branch, elapsed time is calculated from this exact moment!
 
 ---
 
@@ -376,12 +418,16 @@ You can either:
    ```bash
    node /path/to/tracker-mcp/build/index.js install-hook
    ```
-   *(Without the `--global` flag, it installs directly into `.git/hooks/post-commit`)*.
+   *(Without the `--global` flag, it installs directly into `.git/hooks/post-commit` and `.git/hooks/post-checkout`)*.
 
 2. **Option B (Husky integration)**:
-   If the repo uses Husky, add this single line at the end of `.husky/post-commit` (or `.husky/pre-push`):
+   If the repo uses Husky, add this single line at the end of `.husky/post-commit`:
    ```bash
    node /path/to/tracker-mcp/build/index.js git-hook post-commit
+   ```
+   And in `.husky/post-checkout`:
+   ```bash
+   node /path/to/tracker-mcp/build/index.js git-hook post-checkout
    ```
 </details>
 
@@ -430,13 +476,31 @@ Always use **forward slashes** `/` in JSON config paths:
 <summary><h3>Q5: How is time calculated between commits?</h3></summary>
 
 **Smart Time Elapsed Calculation:**
-- The hook checks the timestamp of your current commit and compares it to your previous commit in that repository.
-- If commits are within standard working intervals (e.g. 45 minutes apart), it logs the exact elapsed time (rounded to 15-minute increments).
-- If this is your first commit of the day or there is a large multi-day gap, it assigns a sensible default work block (e.g., 0.5h to 1.0h) to prevent logging overnight inactive hours.
+- The hook checks your **active session start anchor** (recorded when your AI editor booted or when you ran `git checkout`).
+- If this is your first commit after starting work, it logs the genuine elapsed time between that anchor and your commit.
+- For consecutive commits on the same day, it logs the delta between commits rounded to 5 minutes.
+- If you were idle for over 90 minutes, it caps the idle gap so inactive hours are never counted.
 </details>
 
 <details>
 <summary><h3>Q6: Will a failed Git hook block my commit?</h3></summary>
 
 **No.** The Git hook is designed to be completely non-blocking. If your network is offline, the API is unreachable, or a project is not recognized, Git will display a gentle terminal warning, but your `git commit` or `git push` will **never be halted or failed**.
+</details>
+
+<details>
+<summary><h3>Q7: What happens if I work late at night past midnight?</h3></summary>
+
+**Automatic Midnight Splitting:**
+If you start coding at 10:00 PM and commit at 4:00 AM, the server automatically splits the duration across the midnight boundary into two distinct logs:
+- **Yesterday's date**: 2.0h (10 PM to 12 AM)
+- **Today's date**: 4.0h (12 AM to 4 AM)
+Daily statistics and analytics charts remain 100% accurate without manual calculation.
+</details>
+
+<details>
+<summary><h3>Q8: How does the system prevent inflated commit tags like <code>[time: 10h]</code>?</h3></summary>
+
+**Anti-Manipulation Clamping:**
+The server verifies custom time tags against your server-side session heartbeats and commit history (+ 15m grace period). Unverified claims that exceed the actual elapsed work window are clamped to the true elapsed time, protecting team metrics while preventing time padding.
 </details>
