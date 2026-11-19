@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Carpe Analytics MCP Tracker & Git Commit Auto-Logger Windows 1-Line Installer
 # Supported: Windows 10/11 (PowerShell 5.1+ / PowerShell Core 7+)
 # ==============================================================================
@@ -72,7 +72,31 @@ if (-not (Test-Path $targetFile)) {
   exit 1
 }
 
+# Cryptographic integrity verification (SHA-256)
+$checksumUrl = "$Url/tracker.mjs.sha256"
+try {
+  $expectedHash = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing -ErrorAction Stop).Content.Trim().ToLower()
+  if ($expectedHash) {
+    $actualHash = (Get-FileHash -Path $targetFile -Algorithm SHA256).Hash.ToLower()
+    if ($actualHash -ne $expectedHash) {
+      Write-Host "❌ SECURITY ERROR: Downloaded file integrity check FAILED!" -ForegroundColor Red
+      Write-Host "Expected: $expectedHash" -ForegroundColor Red
+      Write-Host "Got:      $actualHash" -ForegroundColor Red
+      Write-Host "The file may have been tampered with or corrupted in transit. Aborting installation." -ForegroundColor Red
+      Remove-Item -Path $targetFile -Force
+      exit 1
+    }
+    Write-Host "✔ Runtime integrity verified: SHA-256 match" -ForegroundColor Green
+  }
+} catch {
+  Write-Host "ℹ Checksum verification skipped (server does not provide .sha256 file)" -ForegroundColor Blue
+}
+
 Write-Host "✔ Runtime installed in $targetFile" -ForegroundColor Green
+
+if (-not $Key) {
+  Write-Host "ℹ Note: No API key provided (-Key). If your team requires API keys, re-run with: -Key YOUR_KEY" -ForegroundColor Blue
+}
 
 $setupArgs = @("setup", "--name", $Name, "--url", "$Url/api")
 if ($Key) {

@@ -21,6 +21,12 @@ export async function GET(req: NextRequest) {
   const requestedDeveloperId = searchParams.get("developerId");
   const category = searchParams.get("category");
 
+  const full = searchParams.get("full") === "true";
+  const limitLogsParam = searchParams.get("limitLogs");
+  const offsetLogs = Math.max(0, parseInt(searchParams.get("offsetLogs") || "0", 10) || 0);
+  const limitCommitsParam = searchParams.get("limitCommits");
+  const offsetCommits = Math.max(0, parseInt(searchParams.get("offsetCommits") || "0", 10) || 0);
+
   const storage = getArtifactStorage();
   const snapshot = await storage.readLatestAnalytics();
 
@@ -134,6 +140,32 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Sort logs by date DESC, then id DESC for optimal recency preview
+  const sortedLogs = [...filteredLogs].sort(
+    (a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)
+  );
+
+  // Sort commits by date DESC
+  const sortedCommits = [...filteredCommits].sort(
+    (a, b) => new Date(b.commitDateUtc).getTime() - new Date(a.commitDateUtc).getTime()
+  );
+
+  let pagedLogs: typeof filteredLogs;
+  if (full || limitLogsParam === "all") {
+    pagedLogs = sortedLogs;
+  } else {
+    const limitLogs = limitLogsParam ? Math.max(1, parseInt(limitLogsParam, 10) || 20) : 20;
+    pagedLogs = sortedLogs.slice(offsetLogs, offsetLogs + limitLogs);
+  }
+
+  let pagedCommits: typeof filteredCommits;
+  if (full || limitCommitsParam === "all") {
+    pagedCommits = sortedCommits;
+  } else {
+    const limitCommits = limitCommitsParam ? Math.max(1, parseInt(limitCommitsParam, 10) || 20) : 20;
+    pagedCommits = sortedCommits.slice(offsetCommits, offsetCommits + limitCommits);
+  }
+
   return NextResponse.json({
     schemaVersion: snapshot.schemaVersion,
     generatedAtUtc: snapshot.generatedAtUtc,
@@ -144,12 +176,18 @@ export async function GET(req: NextRequest) {
     summary: {
       ...agg.summary,
       developerCount: finalDevelopers.length,
+      workLogCount: filteredLogs.length,
+      githubCommitCount: filteredCommits.length,
     },
     projects: agg.projects,
     developers: finalDevelopers,
     categories: agg.categories,
-    workLogs: filteredLogs,
-    githubCommits: filteredCommits,
+    workLogs: pagedLogs,
+    totalWorkLogsCount: filteredLogs.length,
+    hasMoreWorkLogs: offsetLogs + pagedLogs.length < filteredLogs.length,
+    githubCommits: pagedCommits,
+    totalCommitsCount: filteredCommits.length,
+    hasMoreCommits: offsetCommits + pagedCommits.length < filteredCommits.length,
     recentActivity,
     topProjects: (snapshot as any).topProjects || [],
     filtersApplied: {

@@ -77,7 +77,7 @@ fi
     const hooksToInstall = ["post-commit", "post-checkout"];
     for (const h of hooksToInstall) {
       const targetHookFile = path.join(globalHooksDir, h);
-      fs.writeFileSync(targetHookFile, createHookScript(h), { mode: 0o755 });
+      fs.writeFileSync(targetHookFile, createHookScript(h), { mode: 0o700 });
     }
 
     // Set git config --global core.hooksPath
@@ -104,7 +104,7 @@ fi
 
     const hookName = options.hookName || "post-commit";
     const targetHookFile = path.join(hooksDir, hookName);
-    fs.writeFileSync(targetHookFile, createHookScript(hookName), { mode: 0o755 });
+    fs.writeFileSync(targetHookFile, createHookScript(hookName), { mode: 0o700 });
 
     console.log(`\x1b[32m✔ Local Git hook installed successfully in current repository!\x1b[0m`);
     console.log(`• Hook Location: ${targetHookFile}`);

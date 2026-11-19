@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:tracker": "mkdir -p public && cd mcp-server && npx esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=../public/tracker.mjs --format=esm --banner:js='import { createRequire } from \"module\"; const require = createRequire(import.meta.url);'",
+    "build:tracker": "mkdir -p public && cd mcp-server && npx esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=../public/tracker.mjs --format=esm --banner:js='import { createRequire } from \"module\"; const require = createRequire(import.meta.url);' && sha256sum ../public/tracker.mjs | awk '{print $1}' > ../public/tracker.mjs.sha256",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",

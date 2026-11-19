@@ -26,6 +26,7 @@ const PUBLIC_PATHS = [
   "/api/tickets/photos",
   "/api/projects/public-directory",
   "/tracker.mjs",
+  "/tracker.mjs.sha256",
   "/setup.sh",
   "/setup.ps1",
   "/api/setup.sh",

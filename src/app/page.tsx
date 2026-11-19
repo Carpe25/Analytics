@@ -21,6 +21,8 @@ export default function OverviewPage() {
   const [snapshot, setSnapshot] = useState<ExtendedAnalyticsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEmpty, setIsEmpty] = useState(false);
+  const [logsLimit, setLogsLimit] = useState(10);
+  const [commitsLimit, setCommitsLimit] = useState(10);
   const [filters, setFilters] = useState({
     month: "all",
     startDate: "",
@@ -39,6 +41,8 @@ export default function OverviewPage() {
     if (filters.projectId !== "all") query.set("projectId", filters.projectId);
     if (filters.developerId !== "all") query.set("developerId", filters.developerId);
     if (filters.category !== "all") query.set("category", filters.category);
+    query.set("limitLogs", String(logsLimit));
+    query.set("limitCommits", String(commitsLimit));
 
     fetch(`/api/analytics?${query.toString()}`)
       .then((res) => res.json())
@@ -55,7 +59,7 @@ export default function OverviewPage() {
         setIsEmpty(true);
       })
       .finally(() => setLoading(false));
-  }, [filters]);
+  }, [filters, logsLimit, commitsLimit]);
 
   useEffect(() => {
     loadData();
@@ -63,6 +67,8 @@ export default function OverviewPage() {
 
   const handleFilterChange = (key: string, val: string) => {
     setFilters((prev) => ({ ...prev, [key]: val }));
+    setLogsLimit(10);
+    setCommitsLimit(10);
   };
 
   const handleResetFilters = () => {
@@ -74,6 +80,8 @@ export default function OverviewPage() {
       developerId: "all",
       category: "all",
     });
+    setLogsLimit(10);
+    setCommitsLimit(10);
   };
 
   return (
@@ -140,6 +148,9 @@ export default function OverviewPage() {
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-[#17212B]" />
                     <h3 className="text-sm font-semibold text-[#17212B]">Recent Work Logs</h3>
+                    <span className="text-xs text-[#17212B]/60 font-mono">
+                      ({snapshot.workLogs.length} of {snapshot.totalWorkLogsCount ?? snapshot.workLogs.length})
+                    </span>
                   </div>
                   <Link
                     href="/projects"
@@ -161,10 +172,7 @@ export default function OverviewPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {[...snapshot.workLogs]
-                        .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
-                        .slice(0, 7)
-                        .map((log) => (
+                      {snapshot.workLogs.map((log) => (
                         <TableRow key={log.id} className="border-b border-[#17212B]/10">
                           <TableCell className="font-mono text-xs py-2 whitespace-nowrap">{log.date}</TableCell>
                           <TableCell className="text-xs font-semibold py-2">{log.developerName}</TableCell>
@@ -182,6 +190,19 @@ export default function OverviewPage() {
                     </TableBody>
                   </Table>
                 </div>
+                {(snapshot.hasMoreWorkLogs || snapshot.workLogs.length < (snapshot.totalWorkLogsCount ?? 0)) && (
+                  <div className="pt-1 text-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLogsLimit((prev) => prev + 15)}
+                      disabled={loading}
+                      className="text-xs text-[#17212B] hover:bg-[#17212B]/5 font-medium h-8 border-[#17212B]/20"
+                    >
+                      Load older logs ({(snapshot.totalWorkLogsCount ?? 0) - snapshot.workLogs.length} remaining)
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Recent Commits */}
@@ -190,6 +211,9 @@ export default function OverviewPage() {
                   <div className="flex items-center gap-2">
                     <GitCommit className="h-4 w-4 text-[#17212B]" />
                     <h3 className="text-sm font-semibold text-[#17212B]">Recent GitHub Commits</h3>
+                    <span className="text-xs text-[#17212B]/60 font-mono">
+                      ({snapshot.githubCommits.length} of {snapshot.totalCommitsCount ?? snapshot.githubCommits.length})
+                    </span>
                   </div>
                   <Link
                     href="/github"
@@ -199,7 +223,20 @@ export default function OverviewPage() {
                     <ArrowRight className="h-3 w-3" />
                   </Link>
                 </div>
-                <CommitTable commits={snapshot.githubCommits.slice(0, 7)} />
+                <CommitTable commits={snapshot.githubCommits} />
+                {(snapshot.hasMoreCommits || snapshot.githubCommits.length < (snapshot.totalCommitsCount ?? 0)) && (
+                  <div className="pt-1 text-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCommitsLimit((prev) => prev + 15)}
+                      disabled={loading}
+                      className="text-xs text-[#17212B] hover:bg-[#17212B]/5 font-medium h-8 border-[#17212B]/20"
+                    >
+                      Load older commits ({(snapshot.totalCommitsCount ?? 0) - snapshot.githubCommits.length} remaining)
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </>

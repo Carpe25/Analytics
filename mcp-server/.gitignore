@@ -1,3 +1,7 @@
 node_modules/
+build/
 *.tsbuildinfo
 .DS_Store
+.agents/
+.cursor/
+

@@ -2,7 +2,7 @@
   "mcpServers": {
     "project-analytics": {
       "command": "node",
-      "args": ["/home/jay/Desktop/my projects/Analytics system/mcp-server/build/index.js"],
+      "args": ["<WORKSPACE_PATH>/mcp-server/build/index.js"],
       "env": {
         "TRACKER_API_URL": "http://localhost:3000/api",
         "DEVELOPER_NAME": "Your Name"

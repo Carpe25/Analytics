@@ -82,8 +82,42 @@ else
   exit 1
 fi
 
+# Cryptographic integrity verification (SHA-256)
+CHECKSUM_URL="${SERVER_URL}/tracker.mjs.sha256"
+EXPECTED_HASH=""
+if command -v curl >/dev/null 2>&1; then
+  EXPECTED_HASH=$(curl -fsSL "${CHECKSUM_URL}" 2>/dev/null | tr -d '[:space:]' || echo "")
+elif command -v wget >/dev/null 2>&1; then
+  EXPECTED_HASH=$(wget -qO- "${CHECKSUM_URL}" 2>/dev/null | tr -d '[:space:]' || echo "")
+fi
+
+if [ -n "$EXPECTED_HASH" ]; then
+  ACTUAL_HASH=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_HASH=$(sha256sum "${TARGET_FILE}" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL_HASH=$(shasum -a 256 "${TARGET_FILE}" | awk '{print $1}')
+  fi
+
+  if [ -n "$ACTUAL_HASH" ] && [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+    echo -e "${RED}❌ SECURITY ERROR: Downloaded file integrity check FAILED!${NC}"
+    echo -e "${RED}Expected: ${EXPECTED_HASH}${NC}"
+    echo -e "${RED}Got:      ${ACTUAL_HASH}${NC}"
+    echo -e "${RED}The file may have been tampered with or corrupted in transit. Aborting installation.${NC}"
+    rm -f "${TARGET_FILE}"
+    exit 1
+  fi
+  echo -e "${GREEN}✔ Runtime integrity verified:${NC} SHA-256 match"
+else
+  echo -e "${BLUE}ℹ Checksum verification skipped (server does not provide .sha256 file)${NC}"
+fi
+
 chmod +x "${TARGET_FILE}"
 echo -e "${GREEN}✔ Runtime installed in ${TARGET_FILE}${NC}"
+
+if [ -z "$API_KEY" ]; then
+  echo -e "${BLUE}ℹ Note: No API key provided (--key). If your team requires API keys, re-run with: --key YOUR_KEY${NC}"
+fi
 
 SETUP_ARGS=(setup --name "${DEV_NAME}" --url "${SERVER_URL}/api")
 if [ -n "$API_KEY" ]; then

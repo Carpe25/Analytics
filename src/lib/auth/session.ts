@@ -9,7 +9,7 @@ let ephemeralDevSecret: string | null = null;
  * Enforces strict private secret configuration in production and prevents static forgery.
  */
 export function getSessionSecret(): string {
-  const secret = process.env.SESSION_SECRET || process.env.CRON_SECRET || process.env.TRACKER_API_KEY;
+  const secret = process.env.SESSION_SECRET;
   if (secret && secret.trim().length >= 16) {
     return secret.trim();
   }

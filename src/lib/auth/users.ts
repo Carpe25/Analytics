@@ -117,31 +117,4 @@ export {
   verifySignedSessionTokenAsync,
 } from "./session";
 
-/**
- * Synchronous legacy fallback decoder (validates JSON payload format).
- */
-export function decodeUserSession(token: string): AuthUser | null {
-  try {
-    // If it's a signed 3-part token, decode the payload part
-    const payloadPart = token.includes(".") ? token.split(".")[1] : token;
-    const raw = Buffer.from(payloadPart, "base64url").toString("utf8");
-    const user = JSON.parse(raw);
-    const username = user?.username || user?.sub;
-    if (username && user?.role) {
-      return {
-        username,
-        name: user.name || username,
-        role: user.role,
-        developerId: user.developerId,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
-export function encodeUserSession(user: AuthUser): string {
-  const payload = JSON.stringify(user);
-  return Buffer.from(payload).toString("base64url");
-}

@@ -179,6 +179,10 @@ export interface AnalyticsSnapshot {
     commitCount: number;
   }[];
   warnings: string[];
+  totalWorkLogsCount?: number;
+  hasMoreWorkLogs?: boolean;
+  totalCommitsCount?: number;
+  hasMoreCommits?: boolean;
 }
 
 export type TicketStatus = "under_review" | "open" | "assigned" | "resolved";

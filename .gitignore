@@ -20,9 +20,13 @@
 !package.json
 !tsconfig.json
 !components.json
-!.agents/**
-!.cursor/**
+# Agent/cursor config dirs — whitelist dir but NOT secret config files
+.agents/mcp_config.json
+.cursor/mcp.json
+
+# MCP presets — whitelist dir but NOT files with local paths
 !mcp-presets/**
+mcp-presets/claude_desktop_config.json
 !mcp-server/package.json
 !mcp-server/tsconfig.json
 mcp-server/node_modules/

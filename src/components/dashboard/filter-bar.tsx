@@ -37,16 +37,47 @@ export function FilterBar({
   onFilterChange,
   onReset,
 }: FilterBarProps) {
-  const handleExportCsv = () => {
-    const csvContent = exportWorkLogsToCsv(workLogs);
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `work_logs_${filters.month || "all"}_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  const handleExportCsv = async () => {
+    setIsExporting(true);
+    try {
+      const query = new URLSearchParams();
+      if (filters.month && filters.month !== "all") query.set("month", filters.month);
+      if (filters.startDate) query.set("startDate", filters.startDate);
+      if (filters.endDate) query.set("endDate", filters.endDate);
+      if (filters.projectId !== "all") query.set("projectId", filters.projectId);
+      if (filters.developerId !== "all") query.set("developerId", filters.developerId);
+      if (filters.category !== "all") query.set("category", filters.category);
+      query.set("full", "true");
+
+      const res = await fetch(`/api/analytics?${query.toString()}`);
+      const data = await res.json();
+      const logsToExport = (data && Array.isArray(data.workLogs)) ? data.workLogs : workLogs;
+
+      const csvContent = exportWorkLogsToCsv(logsToExport);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `work_logs_${filters.month || "all"}_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      // Fallback to local logs
+      const csvContent = exportWorkLogsToCsv(workLogs);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `work_logs_${filters.month || "all"}_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleMonthChange = (selectedMonth: string) => {
@@ -185,10 +216,11 @@ export function FilterBar({
           variant="outline"
           size="sm"
           onClick={handleExportCsv}
+          disabled={isExporting}
           className="h-8 text-xs gap-1.5 font-medium"
         >
           <Download className="h-3.5 w-3.5" />
-          <span>Export CSV</span>
+          <span>{isExporting ? "Exporting..." : "Export CSV"}</span>
         </Button>
       </div>
     </div>
